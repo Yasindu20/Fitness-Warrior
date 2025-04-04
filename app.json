@@ -32,10 +32,18 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "assets": [
+      "**/*",
+      "./assets/ml/*.json"
+    ],
+    "extra": {
+      "enableMLFeatures": true
     }
   }
 }

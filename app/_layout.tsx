@@ -1,39 +1,93 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import React, { useState, useEffect } from "react";
+import { SafeAreaView, StyleSheet, View, Text, ActivityIndicator } from "react-native";
+import { createStackNavigator } from "@react-navigation/stack";
+import * as tf from '@tensorflow/tfjs';
+import Login from "./login";
+import Signup from "./signup";
+import UserBioForm from "./UserBioForm";
+import UserProfile from "./UserProfile";
+import StepCounter from "./step-counter";
+import Leaderboard from "./leaderboard";
+import MainMenu from "./MainMenu";
+import CalorieTracker from "./CalorieTracker";
 
-import { useColorScheme } from '@/hooks/useColorScheme';
+const Stack = createStackNavigator();
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+export default function AuthLayout() {
+  const [isTfReady, setIsTfReady] = useState(false);
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
-
+  // Initialize TensorFlow.js when app starts
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
+    const initTensorFlow = async () => {
+      try {
+        await tf.ready();
+        setIsTfReady(true);
+        console.log('TensorFlow.js is ready!');
+      } catch (error) {
+        console.error('Failed to initialize TensorFlow.js', error);
+      }
+    };
+    initTensorFlow();
+  }, []);
 
-  if (!loaded) {
-    return null;
+  // Show loading indicator while TensorFlow initializes
+  if (!isTfReady) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#6200ee" />
+        <Text style={styles.loadingText}>Initializing TensorFlow.js...</Text>
+      </SafeAreaView>
+    );
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        <Text style={styles.appTitle}>Fitness Warrior</Text>
+        <Stack.Navigator
+          screenOptions={{
+            headerShown: false, // Hides the header for a clean UI
+          }}
+        >
+          <Stack.Screen name="login" component={Login} />
+          <Stack.Screen name="signup" component={Signup} />
+          <Stack.Screen name="user-bio-form" component={UserBioForm} />
+          <Stack.Screen name="main-menu" component={MainMenu} />
+          <Stack.Screen name="user-profile" component={UserProfile} />
+          <Stack.Screen name="step-counter" component={StepCounter} />
+          <Stack.Screen name="calorie-tracker" component={CalorieTracker} />
+          <Stack.Screen name="leaderboard" component={Leaderboard} />
+        </Stack.Navigator>
+      </View>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#f9f9f9",
+  },
+  container: {
+    flex: 1,
+    padding: 20,
+  },
+  appTitle: {
+    fontSize: 32,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 20,
+    color: "#6200ee",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#6200ee",
+  },
+});

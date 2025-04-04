@@ -1,7 +1,11 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "lib": ["es2015", "dom"],
     "strict": true,
+    "target": "es2015",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
     "paths": {
       "@/*": [
         "./*"
