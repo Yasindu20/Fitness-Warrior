@@ -10,6 +10,9 @@ import StepCounter from "./step-counter";
 import Leaderboard from "./leaderboard";
 import MainMenu from "./MainMenu";
 import CalorieTracker from "./CalorieTracker";
+import PersonalizedGoalsScreen from "../screens/PersonalizedGoalsScreen";
+import GoalDetailScreen from "../screens/GoalDetailScreen";
+import FitnessAnalyticsScreen from "../screens/FitnessAnalyticsScreen";
 
 const Stack = createStackNavigator();
 
@@ -57,6 +60,11 @@ export default function AuthLayout() {
           <Stack.Screen name="step-counter" component={StepCounter} />
           <Stack.Screen name="calorie-tracker" component={CalorieTracker} />
           <Stack.Screen name="leaderboard" component={Leaderboard} />
+          
+          {/* New personalized goals screens */}
+          <Stack.Screen name="personalized-goals" component={PersonalizedGoalsScreen} />
+          <Stack.Screen name="goal-detail" component={GoalDetailScreen} />
+          <Stack.Screen name="fitness-analytics" component={FitnessAnalyticsScreen} />
         </Stack.Navigator>
       </View>
     </SafeAreaView>
