@@ -21,7 +21,6 @@ import {
     Timestamp,
     limit
   } from 'firebase/firestore';
-  import { v4 as uuidv4 } from 'uuid';
   
   class GoalsTrackingService {
     /**
@@ -119,7 +118,8 @@ import {
         const goalDoc = await getDoc(goalRef);
         
         if (!goalDoc.exists()) {
-          throw new Error('Goal not found');
+          console.warn(`Goal with ID ${goalId} not found. Skipping update.`);
+          return null;
         }
         
         // Get goal data
@@ -194,6 +194,10 @@ import {
         
         // Get active goals
         const activeGoals = await this.getActiveGoals();
+        if (activeGoals.length === 0) {
+          console.log('No active goals found to sync');
+          return;
+        }
         
         // Get today's date
         const today = formatDate(new Date());
@@ -213,6 +217,8 @@ import {
      */
     private async syncStepGoals(userId: string, goals: FitnessGoal[], today: string): Promise<void> {
       try {
+        if (goals.length === 0) return;
+        
         // Get step data for each time frame
         const [dailySteps, weeklySteps, monthlySteps] = await Promise.all([
           this.getStepsForTimeframe(userId, today, today),
@@ -222,22 +228,34 @@ import {
         
         // Update each goal
         for (const goal of goals) {
-          let progress = 0;
-          
-          switch (goal.timeFrame) {
-            case GoalTimeFrame.DAILY:
-              progress = dailySteps;
-              break;
-            case GoalTimeFrame.WEEKLY:
-              progress = weeklySteps;
-              break;
-            case GoalTimeFrame.MONTHLY:
-              progress = monthlySteps;
-              break;
+          try {
+            let progress = 0;
+            
+            switch (goal.timeFrame) {
+              case GoalTimeFrame.DAILY:
+                progress = dailySteps;
+                break;
+              case GoalTimeFrame.WEEKLY:
+                progress = weeklySteps;
+                break;
+              case GoalTimeFrame.MONTHLY:
+                progress = monthlySteps;
+                break;
+            }
+            
+            // Skip update if goal doesn't exist anymore
+            if (!goal.id) {
+              console.warn('Goal has no ID, skipping update');
+              continue;
+            }
+            
+            // Update goal progress
+            await this.updateGoalProgress(goal.id, progress);
+          } catch (error) {
+            console.warn(`Error updating goal ${goal.id}:`, error);
+            // Continue with other goals even if one fails
+            continue;
           }
-          
-          // Update goal progress
-          await this.updateGoalProgress(goal.id, progress);
         }
       } catch (error) {
         console.error('Error syncing step goals:', error);
