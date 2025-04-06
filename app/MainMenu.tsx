@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -10,25 +10,32 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from './firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import { useFocusEffect } from '@react-navigation/native'; 
+import { GoalType, GoalTimeFrame } from '../models/FitnessGoalModels'; 
 import GoalsTrackingService from '../services/GoalsTrackingService';
 import RecommendationsService from '../services/RecommendationsService';
-import { 
-  FitnessRecommendation, 
-  GoalTimeFrame 
-} from '../models/FitnessGoalModels';
 
 export default function MainMenu({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState<any>(null);
   const [todaySteps, setTodaySteps] = useState(0);
   const [todayCalories, setTodayCalories] = useState(0);
-  const [recommendations, setRecommendations] = useState<FitnessRecommendation[]>([]);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
   
   const username = auth.currentUser?.displayName || 'User';
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
+  // This effect runs every time the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('MainMenu screen is focused - reloading data');
+      loadUserData();
+      
+      return () => {
+        // This is the cleanup function (optional)
+        console.log('MainMenu screen is unfocused');
+      };
+    }, [])
+  );
 
   const loadUserData = async () => {
     try {
@@ -44,11 +51,12 @@ export default function MainMenu({ navigation }: { navigation: any }) {
         }
       }
       
-      // Sync goal progress
+      // First sync goal progress to make sure goals have latest data
       await GoalsTrackingService.syncGoalProgress();
       
       // Get today's steps and calories
       const todayData = await getTodayData();
+      console.log('Today data:', todayData); // Debug log
       setTodaySteps(todayData.steps);
       setTodayCalories(todayData.calories);
       
@@ -63,23 +71,26 @@ export default function MainMenu({ navigation }: { navigation: any }) {
   };
   
   const getTodayData = async () => {
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    
     try {
       // Get today's steps
       let steps = 0;
+      // Use enum value instead of string
       const stepGoals = await GoalsTrackingService.getActiveGoals(GoalTimeFrame.DAILY);
-      const stepGoal = stepGoals.find(g => g.type === 'step_count');
+      console.log('Step goals:', stepGoals); // Debug log
+      
+      const stepGoal = stepGoals.find(g => g.type === GoalType.STEP_COUNT);
       
       if (stepGoal) {
         steps = stepGoal.current;
+        console.log('Found step goal with current value:', steps); // Debug log
+      } else {
+        console.log('No step goal found for today'); // Debug log
       }
       
       // Get today's calories
       let calories = 0;
       const calorieGoals = await GoalsTrackingService.getActiveGoals(GoalTimeFrame.DAILY);
-      const calorieGoal = calorieGoals.find(g => g.type === 'calorie_intake');
+      const calorieGoal = calorieGoals.find(g => g.type === GoalType.CALORIE_INTAKE);
       
       if (calorieGoal) {
         calories = calorieGoal.current;
@@ -92,6 +103,7 @@ export default function MainMenu({ navigation }: { navigation: any }) {
     }
   };
 
+  // Rest of the component remains the same...
   return (
     <ScrollView style={styles.container}>
       {/* Header with User Greeting */}
