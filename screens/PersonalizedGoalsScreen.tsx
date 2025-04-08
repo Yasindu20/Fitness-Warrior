@@ -39,25 +39,38 @@ export default function PersonalizedGoalsScreen({ navigation }: { navigation: an
   // Load data when screen is focused
   useFocusEffect(
     useCallback(() => {
+      console.log('PersonalizedGoals screen is focused - reloading data');
+      // Force a fresh data load every time the screen comes into focus
       loadData();
-      return () => {}; // Cleanup function
+      return () => {
+        console.log('PersonalizedGoals screen is unfocused');
+      };
     }, [])
   );
   
-  // Load all data
+  // Improve the loadData function with better logging and error handling:
   const loadData = async () => {
     try {
       setLoading(true);
       
       // Sync goal progress with latest activity data
+      console.log('Syncing goal progress...');
       await GoalsTrackingService.syncGoalProgress();
       
       // Load current weather
       const currentWeather = await WeatherService.getCurrentWeather();
       setWeather(currentWeather);
       
-      // Get active goals
+      // Get active goals with direct debugging
+      console.log('Loading active goals...');
       const goals = await GoalsTrackingService.getActiveGoals();
+      console.log('Active goals loaded:', goals.length);
+      
+      // Debug output for each goal
+      goals.forEach(goal => {
+        console.log(`Goal ${goal.id}: ${goal.description} - ${goal.current}/${goal.target} (${goal.status})`);
+      });
+      
       setActiveGoals(goals);
       
       // Get recommendations

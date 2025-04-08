@@ -19,7 +19,8 @@ import {
   orderBy,
   limit,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  setDoc
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -336,19 +337,26 @@ class GoalsGenerationService {
   private async saveGoalsToFirestore(goals: FitnessGoal[]): Promise<void> {
     try {
       const batch = [];
-
+  
       for (const goal of goals) {
         // Remove any undefined values to avoid Firestore errors
         const cleanGoal = this.removeUndefinedValues(goal);
-
-        batch.push(addDoc(collection(db, 'fitnessGoals'), {
+  
+        // IMPORTANT FIX: Use setDoc with the goal's existing UUID instead of addDoc
+        // This ensures the goal ID in Firestore matches the ID used in our code
+        const goalRef = doc(db, 'fitnessGoals', goal.id);
+        
+        console.log(`Saving goal with ID ${goal.id} to Firestore`);
+        
+        batch.push(setDoc(goalRef, {
           ...cleanGoal,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         }));
       }
-
+  
       await Promise.all(batch);
+      console.log(`Successfully saved ${goals.length} goals to Firestore`);
     } catch (error) {
       console.error('Error saving goals to Firestore:', error);
       throw error;

@@ -13,6 +13,7 @@ import {
   increment,
   serverTimestamp
 } from 'firebase/firestore';
+import GoalsTrackingService from './GoalsTrackingService';
 import { formatDate } from '../utils/dateUtils';
 
 export interface StepData {
@@ -83,6 +84,11 @@ export const saveStepCount = async (steps: number): Promise<void> => {
     });
     
     console.log(`Successfully saved ${steps} steps for ${today}`);
+    
+    // NEW ADDITION: Update goal progress immediately
+    // This ensures that step goals are updated right after saving steps
+    console.log('Syncing goal progress after saving steps...');
+    await GoalsTrackingService.syncGoalProgress();
   } catch (error) {
     console.error('Error saving step count:', error);
     throw error;

@@ -15,25 +15,25 @@ const StepCounter = () => {
   const [sensorData, setSensorData] = useState([]);
   const [modelStatus, setModelStatus] = useState('Loading model...');
   const [isSaving, setIsSaving] = useState(false);
-  
+
   // Refs to maintain state between renders
   const stepCountRef = useRef(0);
   const initialStepCountRef = useRef(0); // To track steps in this session
   const isInitializedRef = useRef(false);
   const lastSaveTimeRef = useRef(0); // To avoid too frequent saves
-  
+
   // Initialize model and sensors on component mount
   useEffect(() => {
     const initTensorFlow = async () => {
       try {
         if (isInitializedRef.current) return;
-        
+
         setModelStatus('Initializing TensorFlow.js...');
         await tf.ready();
-        
+
         setModelStatus('Loading step detection model...');
         const modelLoaded = await modelService.loadModel();
-        
+
         if (modelLoaded) {
           setModelStatus('Model ready');
           setIsModelReady(true);
@@ -48,41 +48,45 @@ const StepCounter = () => {
     };
 
     initTensorFlow();
-    
+
     // Clean up on unmount
     return () => {
       sensorService.stop();
       modelService.dispose();
-      // Save final steps when component unmounts
-      if (stepCountRef.current > 0) {
+      // Only save final steps when component unmounts if we're still in counting mode
+      // This prevents double saving when toggleCounting has already saved steps
+      if (isCountingSteps && stepCountRef.current > initialStepCountRef.current) {
+        console.log('Component unmounting - saving final steps');
         saveCurrentSteps();
+      } else {
+        console.log('Component unmounting - no need to save steps again');
       }
     };
   }, []);
-  
+
   // Set up sensor callback when isCountingSteps changes
   useEffect(() => {
     if (isCountingSteps) {
       // Start with the current step count
       initialStepCountRef.current = stepCountRef.current;
-      
+
       // Define the callback for processed sensor data
       sensorService.setWindowCompleteCallback(async (windowData) => {
         // Update visualizer with the latest data
         setSensorData(windowData.slice(-10)); // Just show last 10 points
-        
+
         // Predict step with the current window of data
         const stepDetected = await modelService.predictStep(windowData);
-        
+
         if (stepDetected) {
           // Vibrate briefly to provide haptic feedback for step detection
           Vibration.vibrate(100);
-          
+
           // Increment step count
           stepCountRef.current += 1;
           setStepCount(stepCountRef.current);
           console.log(`Step detected! Total count: ${stepCountRef.current}`);
-          
+
           // Save step data periodically (every 50 steps or every 2 minutes)
           const now = Date.now();
           const sessionSteps = stepCountRef.current - initialStepCountRef.current;
@@ -92,7 +96,7 @@ const StepCounter = () => {
           }
         }
       });
-      
+
       // Start collecting sensor data
       sensorService.start();
       console.log('Step counting started');
@@ -100,14 +104,28 @@ const StepCounter = () => {
       // Stop collecting sensor data
       sensorService.stop();
       console.log('Step counting stopped');
-      
+
       // Save steps when stopping
       if (stepCountRef.current > initialStepCountRef.current) {
         saveCurrentSteps();
       }
     }
   }, [isCountingSteps]);
+
+  const toggleCounting = () => {
+    if (isCountingSteps) {
+      // Stop counting first, then save steps
+      setIsCountingSteps(false);
+      console.log('Stopping step counting, saving current steps');
+      saveCurrentSteps();
+    } else {
+      // Reset session counter and start counting
+      initialStepCountRef.current = stepCountRef.current;
+      setIsCountingSteps(true);
+    }
+  };
   
+  // Modify the saveCurrentSteps function to be more robust
   const saveCurrentSteps = async () => {
     // Don't save if not logged in
     if (!auth.currentUser) {
@@ -123,7 +141,9 @@ const StepCounter = () => {
         console.log(`Saving ${sessionSteps} steps to Firestore`);
         await saveStepCount(sessionSteps);
         console.log('Steps saved successfully');
-        initialStepCountRef.current = stepCountRef.current; // Reset session counter
+        initialStepCountRef.current = stepCountRef.current; // Reset session counter after saving
+      } else {
+        console.log('No new steps to save');
       }
     } catch (error) {
       console.error('Failed to save steps:', error);
@@ -131,15 +151,7 @@ const StepCounter = () => {
       setIsSaving(false);
     }
   };
-  
-  const toggleCounting = () => {
-    if (isCountingSteps) {
-      // If stopping, save current steps
-      saveCurrentSteps();
-    }
-    setIsCountingSteps(!isCountingSteps);
-  };
-  
+
   const resetStepCount = () => {
     stepCountRef.current = 0;
     initialStepCountRef.current = 0;
@@ -158,15 +170,15 @@ const StepCounter = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Step Counter</Text>
-      
+
       <View style={styles.countContainer}>
         <Text style={styles.countLabel}>Steps Taken:</Text>
         <Text style={styles.countValue}>{stepCount}</Text>
         {isSaving && <Text style={styles.savingText}>Saving...</Text>}
       </View>
-      
+
       <Visualizer data={sensorData} />
-      
+
       <View style={styles.buttonContainer}>
         <Button
           title={isCountingSteps ? "Stop Counting" : "Start Counting"}
@@ -180,10 +192,10 @@ const StepCounter = () => {
           disabled={isCountingSteps}
         />
       </View>
-      
+
       <Text style={styles.footer}>
-        {isCountingSteps 
-          ? "Walk naturally with your phone in your pocket or hand" 
+        {isCountingSteps
+          ? "Walk naturally with your phone in your pocket or hand"
           : "Press Start to begin counting steps"}
       </Text>
     </View>

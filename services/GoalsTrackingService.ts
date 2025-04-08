@@ -113,13 +113,44 @@ import {
           throw new Error('User not logged in');
         }
         
-        // Get current goal
-        const goalRef = doc(db, 'fitnessGoals', goalId);
-        const goalDoc = await getDoc(goalRef);
+        // Get current goal - First try with exact ID
+        let goalRef = doc(db, 'fitnessGoals', goalId);
+        let goalDoc = await getDoc(goalRef);
         
+        // If not found, try to find by alternative methods
         if (!goalDoc.exists()) {
-          console.warn(`Goal with ID ${goalId} not found. Skipping update.`);
-          return null;
+          console.warn(`Goal with ID ${goalId} not found by direct lookup. Trying query...`);
+          
+          // Try to find the goal by querying with user ID, description, and timeframe
+          // This helps if the goal was created with UUID but saved with Firebase ID
+          const goalsQuery = query(
+            collection(db, 'fitnessGoals'),
+            where('userId', '==', user.uid),
+            where('status', 'in', [GoalStatus.PENDING, GoalStatus.IN_PROGRESS])
+          );
+          
+          const querySnapshot = await getDocs(goalsQuery);
+          let foundGoalDoc = null;
+          
+          querySnapshot.forEach(doc => {
+            // Check if the goal data matches what we expect
+            const data = doc.data();
+            if (data.type === GoalType.STEP_COUNT && 
+                data.timeFrame === GoalTimeFrame.DAILY) {
+              console.log(`Found matching goal with ID: ${doc.id} (instead of ${goalId})`);
+              foundGoalDoc = { id: doc.id, ...data };
+              // Update the goal reference to use this document
+              goalRef = doc.ref;
+            }
+          });
+          
+          if (!foundGoalDoc) {
+            console.warn(`No alternative goal found for user. Skipping update.`);
+            return null;
+          }
+          
+          // Use the found goal data
+          goalDoc = await getDoc(goalRef);
         }
         
         // Get goal data
@@ -140,6 +171,8 @@ import {
           status = GoalStatus.COMPLETED;
         }
         
+        console.log(`Updating goal ${goalRef.id} progress: ${current}/${target} (${status})`);
+        
         // Update goal in Firestore
         await updateDoc(goalRef, {
           current,
@@ -153,14 +186,14 @@ import {
           
           // Update streak if it's a daily goal
           if (goalData.timeFrame === GoalTimeFrame.DAILY) {
-            await this.updateStreak(goalId, (goalData.streak || 0) + 1);
+            await this.updateStreak(goalRef.id, (goalData.streak || 0) + 1);
           }
         }
         
         // Return updated goal data
         return {
           ...goalData,
-          id: goalId,
+          id: goalRef.id,
           current,
           status
         };
