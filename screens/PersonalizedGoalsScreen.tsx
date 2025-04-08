@@ -17,6 +17,7 @@ import { FitnessGoal, GoalTimeFrame, GoalStatus, FitnessRecommendation } from '.
 import GoalsTrackingService from '../services/GoalsTrackingService';
 import GoalsGenerationService from '../services/GoalsGenerationService';
 import RecommendationsService from '../services/RecommendationsService';
+import WorkoutProgramService from '../services/WorkoutProgramService';
 import WeatherService from '../services/WeatherService';
 import { auth } from '../app/firebaseConfig';
 import { formatDate } from '../utils/dateUtils';
@@ -27,14 +28,22 @@ const GoalTimeFrameLabels = {
   [GoalTimeFrame.MONTHLY]: 'This Month'
 };
 
-export default function PersonalizedGoalsScreen({ navigation }: { navigation: any }) {
+export default function PersonalizedGoalsScreen({ navigation, route }: { navigation: any, route: any }) {
   const [activeGoals, setActiveGoals] = useState<FitnessGoal[]>([]);
   const [recommendations, setRecommendations] = useState<FitnessRecommendation[]>([]);
   const [achievements, setAchievements] = useState<any[]>([]);
+  const [workoutPrograms, setWorkoutPrograms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('goals'); // 'goals', 'recommendations', 'achievements'
+  const [activeTab, setActiveTab] = useState('goals'); // 'goals', 'recommendations', 'achievements', 'programs'
   const [weather, setWeather] = useState<any>(null);
+  
+  // Check if we should navigate to a specific tab from route params
+  useEffect(() => {
+    if (route.params?.tab) {
+      setActiveTab(route.params.tab);
+    }
+  }, [route.params]);
   
   // Load data when screen is focused
   useFocusEffect(
@@ -48,7 +57,7 @@ export default function PersonalizedGoalsScreen({ navigation }: { navigation: an
     }, [])
   );
   
-  // Improve the loadData function with better logging and error handling:
+  // Improved loadData function with better logging and error handling:
   const loadData = async () => {
     try {
       setLoading(true);
@@ -80,6 +89,12 @@ export default function PersonalizedGoalsScreen({ navigation }: { navigation: an
       // Get achievements
       const achievs = await GoalsTrackingService.getAchievements();
       setAchievements(achievs);
+      
+      // Get workout programs - NEW!
+      console.log('Loading workout programs...');
+      const programs = await WorkoutProgramService.getUserPrograms();
+      console.log('Workout programs loaded:', programs.length);
+      setWorkoutPrograms(programs);
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load goals and recommendations');
@@ -133,6 +148,70 @@ export default function PersonalizedGoalsScreen({ navigation }: { navigation: an
       console.error('Error completing recommendation:', error);
       Alert.alert('Error', 'Failed to complete recommendation');
     }
+  };
+  
+  // Activate a workout program
+  const activateProgram = async (programId: string) => {
+    try {
+      await WorkoutProgramService.activateProgram(programId);
+      
+      // Reload programs to reflect the change
+      const programs = await WorkoutProgramService.getUserPrograms();
+      setWorkoutPrograms(programs);
+      
+      Alert.alert('Success', 'Workout program activated!');
+    } catch (error) {
+      console.error('Error activating program:', error);
+      Alert.alert('Error', 'Failed to activate program');
+    }
+  };
+  
+  // Delete a workout program
+  const deleteProgram = async (programId: string) => {
+    try {
+      Alert.alert(
+        'Confirm Deletion',
+        'Are you sure you want to delete this workout program?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              await WorkoutProgramService.deleteProgram(programId);
+              
+              // Reload programs to reflect the change
+              const programs = await WorkoutProgramService.getUserPrograms();
+              setWorkoutPrograms(programs);
+              
+              Alert.alert('Success', 'Workout program deleted!');
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error deleting program:', error);
+      Alert.alert('Error', 'Failed to delete program');
+    }
+  };
+  
+  // View workout details
+  const viewWorkoutDetails = (program: any) => {
+    // This would navigate to a workout detail screen
+    // For now, we'll just show an alert with program info
+    Alert.alert(
+      program.title,
+      `${program.description}\n\nThis is a ${program.level} level program focusing on ${program.focusArea}.`,
+      [
+        {
+          text: 'OK',
+          style: 'cancel'
+        }
+      ]
+    );
   };
   
   // Render goal progress bar
@@ -352,6 +431,77 @@ export default function PersonalizedGoalsScreen({ navigation }: { navigation: an
     );
   };
   
+  // Render a workout program card
+  const renderWorkoutProgramCard = (program: any) => {
+    const isActive = program.active;
+    const completionPercentage = WorkoutProgramService.getCompletionPercentage(program);
+    
+    return (
+      <View key={program.id} style={styles.programCard}>
+        <View style={styles.programHeader}>
+          <View style={[
+            styles.programIconContainer, 
+            isActive ? styles.activeProgramIcon : {}
+          ]}>
+            <Ionicons name="barbell-outline" size={24} color={isActive ? "#fff" : "#6200ee"} />
+          </View>
+          <View style={styles.programTitleContainer}>
+            <Text style={styles.programTitle}>{program.title}</Text>
+            <Text style={styles.programSubtitle}>
+              {program.level.charAt(0).toUpperCase() + program.level.slice(1)} • {program.focusArea}
+            </Text>
+            {isActive && (
+              <View style={styles.activeBadge}>
+                <Text style={styles.activeBadgeText}>Active</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        
+        {/* Progress bar */}
+        <View style={styles.programProgressContainer}>
+          <View style={styles.programProgressBackground}>
+            <View 
+              style={[
+                styles.programProgressFill,
+                { width: `${completionPercentage}%` }
+              ]} 
+            />
+          </View>
+          <Text style={styles.programProgressText}>
+            {completionPercentage}% Complete
+          </Text>
+        </View>
+        
+        {/* Action buttons */}
+        <View style={styles.programActions}>
+          <TouchableOpacity 
+            style={styles.programButton}
+            onPress={() => viewWorkoutDetails(program)}
+          >
+            <Text style={styles.programButtonText}>View</Text>
+          </TouchableOpacity>
+          
+          {!isActive && (
+            <TouchableOpacity 
+              style={[styles.programButton, styles.activateButton]}
+              onPress={() => activateProgram(program.id)}
+            >
+              <Text style={styles.activateButtonText}>Activate</Text>
+            </TouchableOpacity>
+          )}
+          
+          <TouchableOpacity 
+            style={[styles.programButton, styles.deleteButton]}
+            onPress={() => deleteProgram(program.id)}
+          >
+            <Ionicons name="trash-outline" size={18} color="#F44336" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+  
   // Render weather info
   const renderWeatherInfo = () => {
     if (!weather) return null;
@@ -375,7 +525,7 @@ export default function PersonalizedGoalsScreen({ navigation }: { navigation: an
     
     return (
       <View style={styles.weatherContainer}>
-        <Ionicons name={weatherIcon as any} size={24} color="#666" />
+        <Ionicons name={weatherIcon as any} size={24} color="#fff" />
         <Text style={styles.weatherText}>
           {weather.temperature}°C {weather.condition}
         </Text>
@@ -422,6 +572,14 @@ export default function PersonalizedGoalsScreen({ navigation }: { navigation: an
         >
           <Text style={[styles.tabText, activeTab === 'recommendations' && styles.activeTabText]}>
             Recommendations
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'programs' && styles.activeTab]}
+          onPress={() => setActiveTab('programs')}
+        >
+          <Text style={[styles.tabText, activeTab === 'programs' && styles.activeTabText]}>
+            Programs
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -513,6 +671,32 @@ export default function PersonalizedGoalsScreen({ navigation }: { navigation: an
                   }}
                 >
                   <Text style={styles.generateRecsButtonText}>Generate Recommendations</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+        
+        {/* Programs Tab - NEW! */}
+        {activeTab === 'programs' && (
+          <View>
+            {workoutPrograms.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>Your Workout Programs</Text>
+                {workoutPrograms.map(renderWorkoutProgramCard)}
+              </>
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="barbell-outline" size={48} color="#ccc" />
+                <Text style={styles.emptyStateTitle}>No Workout Programs</Text>
+                <Text style={styles.emptyStateText}>
+                  You haven't saved any workout programs yet. Use the AI Coach to create personalized workout programs.
+                </Text>
+                <TouchableOpacity
+                  style={styles.goToCoachButton}
+                  onPress={() => navigation.navigate('coach')}
+                >
+                  <Text style={styles.goToCoachButtonText}>Go to AI Coach</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -816,6 +1000,107 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'right',
   },
+  // New styles for programs tab
+  programCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.5,
+  },
+  programHeader: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  programIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0e6ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  activeProgramIcon: {
+    backgroundColor: '#6200ee',
+  },
+  programTitleContainer: {
+    flex: 1,
+  },
+  programTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  programSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  activeBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  activeBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  programProgressContainer: {
+    marginVertical: 8,
+  },
+  programProgressBackground: {
+    height: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  programProgressFill: {
+    height: 8,
+    backgroundColor: '#4CAF50',
+    borderRadius: 4,
+  },
+  programProgressText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  programActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+  },
+  programButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 4,
+    marginLeft: 8,
+    backgroundColor: '#f5f5f5',
+  },
+  programButtonText: {
+    color: '#666',
+    fontSize: 14,
+  },
+  activateButton: {
+    backgroundColor: '#e8f5e9',
+  },
+  activateButtonText: {
+    color: '#4CAF50',
+    fontWeight: '500',
+  },
+  deleteButton: {
+    backgroundColor: '#ffebee',
+  },
   emptyState: {
     padding: 20,
     alignItems: 'center',
@@ -859,6 +1144,18 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   generateRecsButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  goToCoachButton: {
+    backgroundColor: '#6200ee',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  goToCoachButtonText: {
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 14,
