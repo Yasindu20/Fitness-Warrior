@@ -14,6 +14,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { GoalType, GoalTimeFrame } from '../models/FitnessGoalModels'; 
 import GoalsTrackingService from '../services/GoalsTrackingService';
 import RecommendationsService from '../services/RecommendationsService';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { formatDate } from '../utils/dateUtils';
 
 export default function MainMenu({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(true);
@@ -51,12 +53,14 @@ export default function MainMenu({ navigation }: { navigation: any }) {
         }
       }
       
-      // First sync goal progress to make sure goals have latest data
+      // Make sure goals are synced first
+      console.log('Syncing goal progress before loading Main Menu data...');
       await GoalsTrackingService.syncGoalProgress();
       
-      // Get today's steps and calories
+      // Get today's steps and calories with a small delay to ensure Firestore has updated
+      console.log('Getting today data for Main Menu...');
       const todayData = await getTodayData();
-      console.log('Today data:', todayData); // Debug log
+      console.log('Today data:', todayData);
       setTodaySteps(todayData.steps);
       setTodayCalories(todayData.calories);
       
@@ -72,22 +76,46 @@ export default function MainMenu({ navigation }: { navigation: any }) {
   
   const getTodayData = async () => {
     try {
-      // Get today's steps
+      // Get today's date string
+      const today = formatDate(new Date());
+      console.log(`Getting data for date: ${today}`);
+      
+      // ========== IMPROVED STEP COUNTING ==========
+      // Get steps directly from stepHistory collection instead of relying on goals
       let steps = 0;
-      // Use enum value instead of string
-      const stepGoals = await GoalsTrackingService.getActiveGoals(GoalTimeFrame.DAILY);
-      console.log('Step goals:', stepGoals); // Debug log
       
-      const stepGoal = stepGoals.find(g => g.type === GoalType.STEP_COUNT);
+      // Query step history for today's steps
+      const stepHistoryRef = collection(db, 'stepHistory');
+      const stepQuery = query(
+        stepHistoryRef,
+        where('userId', '==', auth.currentUser?.uid),
+        where('date', '==', today)
+      );
       
-      if (stepGoal) {
-        steps = stepGoal.current;
-        console.log('Found step goal with current value:', steps); // Debug log
-      } else {
-        console.log('No step goal found for today'); // Debug log
+      const stepSnapshot = await getDocs(stepQuery);
+      stepSnapshot.forEach(doc => {
+        steps += doc.data().steps || 0;
+      });
+      
+      console.log(`Found ${steps} steps directly from step history for today (${today})`);
+      
+      // Still check goals as a backup if no steps found in history
+      if (steps === 0) {
+        console.log('No steps found in history, checking goals as backup');
+        const stepGoals = await GoalsTrackingService.getActiveGoals(GoalTimeFrame.DAILY);
+        console.log('Step goals:', stepGoals);
+        
+        const stepGoal = stepGoals.find(g => g.type === GoalType.STEP_COUNT);
+        
+        if (stepGoal) {
+          steps = stepGoal.current;
+          console.log('Found step goal with current value:', steps);
+        } else {
+          console.log('No step goal found for today');
+        }
       }
       
-      // Get today's calories
+      // Get today's calories from goals
       let calories = 0;
       const calorieGoals = await GoalsTrackingService.getActiveGoals(GoalTimeFrame.DAILY);
       const calorieGoal = calorieGoals.find(g => g.type === GoalType.CALORIE_INTAKE);

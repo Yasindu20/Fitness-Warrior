@@ -50,6 +50,8 @@ export const saveStepCount = async (steps: number): Promise<void> => {
     const userId = user.uid;
     const today = formatDate(new Date());
 
+    console.log(`Saving ${steps} steps for user ${userId} on date ${today}`);
+
     // First check if we already have an entry for today
     const stepHistoryRef = collection(db, 'stepHistory');
     const q = query(
@@ -59,9 +61,10 @@ export const saveStepCount = async (steps: number): Promise<void> => {
     );
 
     const querySnapshot = await getDocs(q);
-
+    
     if (querySnapshot.empty) {
       // No entry for today, create a new one
+      console.log('No existing step entry found for today, creating new entry');
       await addDoc(collection(db, 'stepHistory'), {
         userId,
         date: today,
@@ -71,6 +74,7 @@ export const saveStepCount = async (steps: number): Promise<void> => {
     } else {
       // Update existing entry for today
       const docRef = doc(db, 'stepHistory', querySnapshot.docs[0].id);
+      console.log(`Updating existing step entry (ID: ${docRef.id}) for today`);
       await updateDoc(docRef, {
         steps: increment(steps), // Add to existing step count
         timestamp: serverTimestamp()
@@ -80,15 +84,28 @@ export const saveStepCount = async (steps: number): Promise<void> => {
     // Update user's total steps
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
-      totalSteps: increment(steps)
+      totalSteps: increment(steps),
+      updatedAt: serverTimestamp()
     });
     
     console.log(`Successfully saved ${steps} steps for ${today}`);
     
-    // NEW ADDITION: Update goal progress immediately
-    // This ensures that step goals are updated right after saving steps
+    // Update goal progress immediately
     console.log('Syncing goal progress after saving steps...');
     await GoalsTrackingService.syncGoalProgress();
+    
+    // Verify data was saved correctly by reading it back
+    const verificationQuery = query(
+      stepHistoryRef,
+      where('userId', '==', userId),
+      where('date', '==', today)
+    );
+    
+    const verifySnapshot = await getDocs(verificationQuery);
+    if (!verifySnapshot.empty) {
+      const savedSteps = verifySnapshot.docs[0].data().steps;
+      console.log(`Verification: ${savedSteps} steps saved for today`);
+    }
   } catch (error) {
     console.error('Error saving step count:', error);
     throw error;
