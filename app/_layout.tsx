@@ -13,6 +13,8 @@ import CalorieTracker from "./CalorieTracker";
 import PersonalizedGoalsScreen from "../screens/PersonalizedGoalsScreen";
 import GoalDetailScreen from "../screens/GoalDetailScreen";
 import FitnessAnalyticsScreen from "../screens/FitnessAnalyticsScreen";
+import CoachScreen from "../screens/CoachScreen";
+import { preloadAnimations } from "@/utils/AnimationPreloader";
 
 const Stack = createStackNavigator();
 
@@ -24,8 +26,17 @@ export default function AuthLayout() {
     const initTensorFlow = async () => {
       try {
         await tf.ready();
-        setIsTfReady(true);
         console.log('TensorFlow.js is ready!');
+        
+        // Preload animations after TensorFlow is ready
+        try {
+          await preloadAnimations();
+          console.log('Animations preloaded successfully');
+        } catch (animError) {
+          console.error('Failed to preload animations', animError);
+        }
+        
+        setIsTfReady(true);
       } catch (error) {
         console.error('Failed to initialize TensorFlow.js', error);
       }
@@ -65,6 +76,9 @@ export default function AuthLayout() {
           <Stack.Screen name="personalized-goals" component={PersonalizedGoalsScreen} />
           <Stack.Screen name="goal-detail" component={GoalDetailScreen} />
           <Stack.Screen name="fitness-analytics" component={FitnessAnalyticsScreen} />
+          
+          {/* AI Coach screen */}
+          <Stack.Screen name="coach" component={CoachScreen} />
         </Stack.Navigator>
       </View>
     </SafeAreaView>

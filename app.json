@@ -40,7 +40,8 @@
     },
     "assets": [
       "**/*",
-      "./assets/ml/*.json"
+      "./assets/ml/*.json",
+      "./assets/animations/*.json"
     ],
     "extra": {
       "enableMLFeatures": true

@@ -103,7 +103,6 @@ export default function MainMenu({ navigation }: { navigation: any }) {
     }
   };
 
-  // Rest of the component remains the same...
   return (
     <ScrollView style={styles.container}>
       {/* Header with User Greeting */}
@@ -173,6 +172,24 @@ export default function MainMenu({ navigation }: { navigation: any }) {
       {/* Personalized Features */}
       <View style={styles.menuSection}>
         <Text style={styles.sectionTitle}>Personalized Features</Text>
+        
+        {/* AI Coach Menu Item - NEW */}
+        <TouchableOpacity 
+          style={[styles.menuItem, { backgroundColor: '#e6f2ff' }]} 
+          onPress={() => navigation.navigate('coach')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#cce4ff' }]}>
+            <Ionicons name="fitness-outline" size={28} color="#0066CC" />
+          </View>
+          <View style={styles.menuContent}>
+            <View style={styles.newFeatureTag}>
+              <Text style={styles.newFeatureText}>NEW</Text>
+            </View>
+            <Text style={[styles.menuText, { color: '#0066CC' }]}>AI Fitness Coach</Text>
+            <Text style={styles.description}>Get personalized fitness advice and demonstrations</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#0066CC" />
+        </TouchableOpacity>
         
         <TouchableOpacity 
           style={styles.menuItem} 
@@ -367,5 +384,19 @@ const styles = StyleSheet.create({
     color: '#6200ee',
     fontWeight: 'bold',
     textAlign: 'right',
+  },
+  newFeatureTag: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#0066CC',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  newFeatureText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });
