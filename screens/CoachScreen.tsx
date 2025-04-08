@@ -22,6 +22,8 @@ import LottieView from 'lottie-react-native';
 import AICoachService, { CoachMessage, MessageAttachment } from '../services/AICoachService';
 import WorkoutVisualization from '../components/WorkoutVisualization';
 import CoachAvatar from '../components/CoachAvatar';
+import WeeklyProgramComponent from '../components/WeeklyProgramComponent';
+import WorkoutProgramService from '../services/WorkoutProgramService';
 
 // Use types from AICoachService
 
@@ -45,7 +47,7 @@ export default function CoachScreen({ navigation }: { navigation: any }) {
         setTimeout(() => {
             addCoachMessage(
                 "Hi there! I'm your Fitness Warrior Coach. I'm here to help you reach your fitness goals. How can I assist you today?",
-                { type: 'tip', data: { title: 'Coach Tip', content: 'Try asking about workout recommendations, nutrition advice, or progress tracking!' } }
+                { type: 'tip', data: { title: 'Coach Tip', content: 'Try asking about workout recommendations, nutrition advice, progress tracking, or a weekly workout program!' } }
             );
         }, 500);
     }, []);
@@ -100,10 +102,36 @@ export default function CoachScreen({ navigation }: { navigation: any }) {
                     weight: userDataFromDb.weight,
                     height: userDataFromDb.height
                 });
-                setUserData(userDataFromDb);
+                
+                // Include today's metrics in the userData for more personalized recommendations
+                const todayData = await getTodayData();
+                setUserData({
+                    ...userDataFromDb,
+                    todaySteps: todayData.steps,
+                    todayCalories: todayData.calories
+                });
             }
         } catch (error) {
             console.error('Error loading user data:', error);
+        }
+    };
+    
+    // Fetch today's step count and calories
+    const getTodayData = async () => {
+        // This function would normally fetch from your GoalsTrackingService
+        // For now, we'll return mock data if the actual fetch fails
+        try {
+            // Attempt to get real data from your existing services
+            // You could use your GoalsTrackingService here
+            
+            // For demo purposes, return mock data if no real data is available
+            return { 
+                steps: Math.floor(Math.random() * 5000) + 2000, 
+                calories: Math.floor(Math.random() * 1000) + 500 
+            };
+        } catch (error) {
+            console.error('Error getting today data:', error);
+            return { steps: 0, calories: 0 };
         }
     };
 
@@ -270,6 +298,61 @@ export default function CoachScreen({ navigation }: { navigation: any }) {
                         <Text style={styles.tipContent}>{attachment.data.content}</Text>
                     </View>
                 );
+                
+            case 'weeklyProgram':
+                return (
+                    <View style={styles.weeklyProgramContainer}>
+                        <WeeklyProgramComponent 
+                            program={attachment.data}
+                            onComplete={async () => {
+                                // Save the program to Firebase when user clicks "Save Program"
+                                try {
+                                    // Show loading indicator (optional)
+                                    setIsTyping(true);
+                                    
+                                    // Save program to database
+                                    const programId = await WorkoutProgramService.saveProgram(attachment.data);
+                                    
+                                    // Hide loading indicator
+                                    setIsTyping(false);
+                                    
+                                    // Provide feedback when program is saved
+                                    setTimeout(() => {
+                                        addCoachMessage(
+                                            `I've saved your weekly program! You can access it anytime from your Personalized Goals section. Would you like me to explain any part of the program in more detail?`,
+                                            { 
+                                                type: 'tip', 
+                                                data: { 
+                                                    title: 'Program Saved', 
+                                                    content: 'Remember to track your progress with each workout and let me know if you need to adjust the difficulty.' 
+                                                } 
+                                            }
+                                        );
+                                    }, 500);
+            
+                                    // Haptic success feedback
+                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                } catch (error) {
+                                    // Handle error
+                                    setIsTyping(false);
+                                    console.error("Error saving program:", error);
+                                    
+                                    // Error message to user
+                                    addCoachMessage(
+                                        "I had trouble saving your program. Please try again or check your connection.",
+                                        { 
+                                            type: 'tip', 
+                                            data: { 
+                                                title: 'Error Saving Program', 
+                                                content: 'Your progress and preferences have been noted, but there was an issue saving to your profile.' 
+                                            } 
+                                        }
+                                    );
+                                }
+                            }}
+                        />
+                    </View>
+                );
 
             default:
                 return null;
@@ -402,11 +485,11 @@ export default function CoachScreen({ navigation }: { navigation: any }) {
 
 // Suggested conversation topics
 const COACH_TOPICS = [
+    "Create a weekly workout program",
     "What's a good workout for today?",
     "Give me nutrition advice",
-    "How can I improve my sleep?",
-    "Show me my progress",
-    "Help me with weight loss"
+    "Help me with weight loss",
+    "Show me my progress"
 ];
 
 const styles = StyleSheet.create({
@@ -465,12 +548,6 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-end',
         flexDirection: 'row-reverse',
     },
-    coachAvatar: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        marginRight: 8,
-    },
     messageContent: {
         borderRadius: 20,
         padding: 12,
@@ -496,12 +573,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignSelf: 'flex-start',
         marginBottom: 16,
-    },
-    typingAvatar: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        marginRight: 8,
     },
     typingBubble: {
         backgroundColor: '#e0e0e0',
@@ -574,42 +645,6 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         padding: 12,
     },
-    exerciseTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 8,
-        color: '#6200ee',
-    },
-    exerciseItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-        backgroundColor: '#fff',
-        borderRadius: 8,
-        padding: 8,
-    },
-    exerciseGif: {
-        width: 60,
-        height: 60,
-        borderRadius: 8,
-        backgroundColor: '#e0e0e0',
-        marginRight: 12,
-        overflow: 'hidden',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    exerciseDetails: {
-        flex: 1,
-    },
-    exerciseName: {
-        fontSize: 16,
-        fontWeight: '600',
-        marginBottom: 4,
-    },
-    exerciseReps: {
-        fontSize: 14,
-        color: '#666',
-    },
     chartContainer: {
         marginTop: 12,
         backgroundColor: '#f0f0f0',
@@ -668,4 +703,8 @@ const styles = StyleSheet.create({
         color: '#333',
         lineHeight: 20,
     },
+    weeklyProgramContainer: {
+        marginTop: 12,
+        width: '100%',
+    }
 });

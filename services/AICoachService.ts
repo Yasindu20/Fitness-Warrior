@@ -1,4 +1,3 @@
-//AICoachService.tsx
 import { FitnessGoal, GoalTimeFrame, GoalType } from '../models/FitnessGoalModels';
 
 // Types for the AI Coach service
@@ -11,7 +10,7 @@ export interface CoachMessage {
 }
 
 export interface MessageAttachment {
-  type: 'exercise' | 'chart' | 'tip';
+  type: 'exercise' | 'chart' | 'tip' | 'weeklyProgram';
   data: any;
 }
 
@@ -27,6 +26,23 @@ export interface Exercise {
   intensity?: string;
   description?: string;
   gifUrl?: string;
+}
+
+// Interface for Weekly Programs
+export interface WeeklyProgramData {
+  title: string;
+  description: string;
+  level: 'beginner' | 'intermediate' | 'advanced';
+  focusArea: string;
+  days: ProgramDay[];
+}
+
+export interface ProgramDay {
+  day: string;
+  title: string;
+  workoutType: string;
+  exercises: Exercise[];
+  isRestDay?: boolean;
 }
 
 export interface CoachResponse {
@@ -47,44 +63,49 @@ class AICoachService {
     // Initialize intent patterns
     this.patterns = [
       {
+        // Weekly workout programs pattern
+        pattern: /program|plan|weekly|schedule|routine for (a )?week/i,
+        handler: this.handleProgramRequest.bind(this) // Important: bind 'this' context
+      },
+      {
         pattern: /workout|exercise|training|routine/i,
-        handler: this.handleWorkoutRequest
+        handler: this.handleWorkoutRequest.bind(this)
       },
       {
         pattern: /diet|food|eat|nutrition|meal|calorie/i,
-        handler: this.handleNutritionRequest
+        handler: this.handleNutritionRequest.bind(this)
       },
       {
         pattern: /progress|goal|improve|achievement/i,
-        handler: this.handleProgressRequest
+        handler: this.handleProgressRequest.bind(this)
       },
       {
         pattern: /sleep|rest|recovery|tired/i,
-        handler: this.handleSleepRequest
+        handler: this.handleSleepRequest.bind(this)
       },
       {
         pattern: /cardio|run|jog|walk|running/i,
-        handler: this.handleCardioRequest
+        handler: this.handleCardioRequest.bind(this)
       },
       {
         pattern: /stretch|mobility|flexibility/i,
-        handler: this.handleStretchingRequest
+        handler: this.handleStretchingRequest.bind(this)
       },
       {
         pattern: /weight|fat|lose|burn/i,
-        handler: this.handleWeightLossRequest
+        handler: this.handleWeightLossRequest.bind(this)
       },
       {
         pattern: /muscle|strength|strong|build/i,
-        handler: this.handleStrengthRequest
+        handler: this.handleStrengthRequest.bind(this)
       },
       {
         pattern: /water|hydration|drink|fluid/i,
-        handler: this.handleHydrationRequest
+        handler: this.handleHydrationRequest.bind(this)
       },
       {
         pattern: /hello|hi|hey|greetings/i,
-        handler: this.handleGreeting
+        handler: this.handleGreeting.bind(this)
       }
     ];
   }
@@ -123,6 +144,593 @@ class AICoachService {
     return {
       message: responses[Math.floor(Math.random() * responses.length)]
     };
+  }
+
+  /**
+   * Handle weekly program creation requests with improved personalization
+   */
+  private handleProgramRequest(userMessage: string, userData: any): CoachResponse {
+    // Default values in case user data is incomplete
+    let fitnessLevel: 'beginner' | 'intermediate' | 'advanced' = 'beginner';
+    let focusArea = 'general fitness';
+    let userPreference = '';
+    
+    // 1. DETERMINE FITNESS LEVEL - Use multiple data points for better accuracy
+    
+    // Use steps data as a primary indicator
+    const dailySteps = userData?.todaySteps || 0;
+    if (dailySteps > 10000) {
+      fitnessLevel = 'advanced';
+    } else if (dailySteps > 5000) {
+      fitnessLevel = 'intermediate';
+    }
+    
+    // Refine with historical workout data if available
+    if (userData?.workoutHistory) {
+      const workoutsPerWeek = userData.workoutHistory.length / 4; // Assuming 4 weeks of data
+      if (workoutsPerWeek > 4) {
+        fitnessLevel = 'advanced';
+      } else if (workoutsPerWeek > 2) {
+        fitnessLevel = 'intermediate';
+      }
+    }
+    
+    // Account for user's self-reported fitness level if available
+    if (userData?.fitnessLevel) {
+      // Give weight to user's self assessment, but don't rely solely on it
+      const selfReportedLevel = userData.fitnessLevel.toLowerCase();
+      if (selfReportedLevel.includes('beginner')) {
+        // If user says beginner, trust them regardless of other indicators
+        fitnessLevel = 'beginner';
+      } else if (selfReportedLevel.includes('advanced') || selfReportedLevel.includes('expert')) {
+        // If user reports advanced AND other metrics support at least intermediate
+        if (fitnessLevel !== 'beginner') {
+          fitnessLevel = 'advanced';
+        }
+      }
+    }
+    
+    // 2. DETERMINE FOCUS AREA - Based on user goals and message content
+    
+    // Get from user goals if available
+    const fitnessGoal = userData?.fitnessGoal || 'general';
+    
+    if (fitnessGoal === 'weightLoss' || /weight|loss|burn|fat/i.test(userMessage)) {
+      focusArea = 'weight loss';
+    } else if (fitnessGoal === 'muscleGain' || /muscle|strength|build/i.test(userMessage)) {
+      focusArea = 'muscle building';
+    } else if (/cardio|endurance/i.test(userMessage)) {
+      focusArea = 'cardio endurance';
+    } else if (/flexibility|mobility/i.test(userMessage)) {
+      focusArea = 'flexibility';
+    }
+    
+    // 3. DETERMINE USER PREFERENCES - Look for specific requests in the message
+    
+    // Check if user wants home or gym workouts
+    if (/home|bodyweight/i.test(userMessage)) {
+      userPreference = 'home';
+    } else if (/gym|equipment|weights/i.test(userMessage)) {
+      userPreference = 'gym';
+    }
+    
+    // Check for time constraints
+    let timeConstraint = 0;
+    const timeMatch = userMessage.match(/(\d+)[\s-]*(min|minute)/i);
+    if (timeMatch && timeMatch[1]) {
+      timeConstraint = parseInt(timeMatch[1], 10);
+    }
+    
+    // 4. CREATE PERSONALIZED PROGRAM DESCRIPTION
+    
+    let personalizedDescription = `This ${fitnessLevel} level ${focusArea} program is designed specifically for you`;
+    
+    // Add personalization based on activity level
+    if (userData?.todaySteps) {
+      personalizedDescription += `, taking into account your current activity level (averaging around ${userData.todaySteps} steps per day)`;
+    }
+    
+    // Add personalization based on preferences
+    if (userPreference === 'home') {
+      personalizedDescription += `. All exercises can be done at home with minimal equipment`;
+    } else if (userPreference === 'gym') {
+      personalizedDescription += `. This program makes use of gym equipment for optimal results`;
+    }
+    
+    // Add personalization based on time constraints
+    if (timeConstraint > 0) {
+      personalizedDescription += `. Each workout is designed to be completed within ${timeConstraint} minutes`;
+    }
+    
+    personalizedDescription += `. The program is balanced to provide effective results while preventing overtraining and injury.`;
+    
+    // 5. CREATE APPROPRIATE WEEKLY PROGRAM
+    
+    const program = this.createWeeklyProgram(
+      fitnessLevel, 
+      focusArea, 
+      userData,
+      userPreference,
+      timeConstraint,
+      personalizedDescription
+    );
+    
+    // 6. CREATE COACH RESPONSE WITH PERSONALIZED MESSAGE
+    
+    // Craft a personalized message based on user's data and goals
+    let responseMessage = `I've created a personalized ${fitnessLevel} level ${focusArea} program for you.`;
+    
+    // Add context about their fitness level
+    if (fitnessLevel === 'beginner') {
+      responseMessage += ` This program focuses on building a solid foundation while gradually increasing your fitness level.`;
+    } else if (fitnessLevel === 'intermediate') {
+      responseMessage += ` This program balances challenging workouts with recovery to help you continue progressing.`;
+    } else {
+      responseMessage += ` This program includes higher intensity workouts to continue challenging your advanced fitness level.`;
+    }
+    
+    // Add context about the focus area
+    if (focusArea === 'weight loss') {
+      responseMessage += ` I've incorporated high-efficiency exercises to maximize calorie burn while preserving muscle.`;
+    } else if (focusArea === 'muscle building') {
+      responseMessage += ` I've structured the program to target all major muscle groups with proper rest periods for growth.`;
+    } else if (focusArea === 'cardio endurance') {
+      responseMessage += ` The program includes varied cardio sessions to improve both your aerobic and anaerobic capacity.`;
+    }
+    
+    responseMessage += ` Tap on any day to see the details of that workout.`;
+    
+    return {
+      message: responseMessage,
+      attachment: {
+        type: 'weeklyProgram',
+        data: program
+      }
+    };
+  }
+  
+  /**
+   * Create a weekly workout program with enhanced personalization
+   */
+  private createWeeklyProgram(
+    level: 'beginner' | 'intermediate' | 'advanced', 
+    focusArea: string, 
+    userData: any,
+    userPreference: string = '',
+    timeConstraint: number = 0,
+    customDescription?: string
+  ): WeeklyProgramData {
+    const title = `${level.charAt(0).toUpperCase() + level.slice(1)} ${focusArea.charAt(0).toUpperCase() + focusArea.slice(1)} Program`;
+    
+    // Use provided custom description or generate default one
+    let description = customDescription || `This program is designed specifically for your ${level} fitness level and ${focusArea} goals.`;
+    
+    // Create the weekly program structure
+    const program: WeeklyProgramData = {
+      title,
+      description,
+      level,
+      focusArea,
+      days: this.generateWorkoutDays(level, focusArea, userPreference, timeConstraint)
+    };
+    
+    return program;
+  }
+  
+  /**
+   * Generate the specific workout days with preference and time constraint support
+   */
+  private generateWorkoutDays(
+    level: 'beginner' | 'intermediate' | 'advanced', 
+    focusArea: string,
+    userPreference: string = '',
+    timeConstraint: number = 0
+  ): ProgramDay[] {
+    const days: ProgramDay[] = [];
+    const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    
+    // Configure number of workout/rest days based on level
+    let workoutDays = 3; // Default for beginner
+    if (level === 'intermediate') workoutDays = 4;
+    if (level === 'advanced') workoutDays = 5;
+    
+    // For 'general fitness' and 'weight loss' we'll do full body or cardio each day
+    // For 'muscle building' we'll split by body parts
+    let workoutTypes: string[] = [];
+    
+    // Define workout types based on focus area and level
+    if (focusArea === 'muscle building') {
+      if (level === 'beginner') {
+        workoutTypes = ['Upper Body', 'Rest', 'Lower Body', 'Rest', 'Full Body', 'Rest', 'Rest'];
+      } else if (level === 'intermediate') {
+        workoutTypes = ['Push Day', 'Pull Day', 'Rest', 'Legs Day', 'Upper Body', 'Rest', 'Rest'];
+      } else {
+        workoutTypes = ['Chest & Triceps', 'Back & Biceps', 'Rest', 'Legs & Shoulders', 'Upper Body', 'Lower Body', 'Rest'];
+      }
+    } else if (focusArea === 'weight loss') {
+      if (level === 'beginner') {
+        workoutTypes = ['Cardio', 'Rest', 'Strength', 'Rest', 'Cardio', 'Rest', 'Rest'];
+      } else if (level === 'intermediate') {
+        workoutTypes = ['HIIT', 'Strength', 'Rest', 'Cardio', 'Circuit Training', 'Rest', 'Active Recovery'];
+      } else {
+        workoutTypes = ['HIIT', 'Strength', 'Cardio', 'Rest', 'Circuit Training', 'Strength & Cardio', 'Active Recovery'];
+      }
+    } else if (focusArea === 'cardio endurance') {
+      if (level === 'beginner') {
+        workoutTypes = ['Walk/Jog', 'Rest', 'Light Cardio', 'Rest', 'Walk/Jog', 'Rest', 'Rest'];
+      } else if (level === 'intermediate') {
+        workoutTypes = ['Tempo Run', 'Cross Train', 'Rest', 'Interval Run', 'Easy Run', 'Rest', 'Long Run'];
+      } else {
+        workoutTypes = ['Speed Work', 'Cross Train', 'Tempo Run', 'Rest', 'Hill Training', 'Easy Run', 'Long Run'];
+      }
+    } else if (focusArea === 'flexibility') {
+      if (level === 'beginner') {
+        workoutTypes = ['Basic Stretch', 'Rest', 'Yoga Flow', 'Rest', 'Mobility Work', 'Rest', 'Rest'];
+      } else if (level === 'intermediate') {
+        workoutTypes = ['Dynamic Stretch', 'Yoga Flow', 'Rest', 'Mobility Work', 'Stretch & Strengthen', 'Rest', 'Active Recovery'];
+      } else {
+        workoutTypes = ['Dynamic Stretch', 'Yoga Flow', 'Mobility Work', 'Rest', 'Stretch & Strengthen', 'Yoga Power', 'Active Recovery'];
+      }
+    } else {
+      // General fitness
+      if (level === 'beginner') {
+        workoutTypes = ['Full Body', 'Rest', 'Cardio', 'Rest', 'Full Body', 'Rest', 'Rest'];
+      } else if (level === 'intermediate') {
+        workoutTypes = ['Upper Body', 'Lower Body', 'Rest', 'Cardio', 'Full Body', 'Rest', 'Active Recovery'];
+      } else {
+        workoutTypes = ['Push Day', 'Pull Day', 'Legs Day', 'Rest', 'HIIT', 'Full Body', 'Active Recovery'];
+      }
+    }
+    
+    // Adjust for time constraints if specified
+    if (timeConstraint > 0) {
+      // For very short workouts, make them more focused
+      if (timeConstraint < 20) {
+        // Prioritize full-body, short, intense workouts for time constraints
+        for (let i = 0; i < workoutTypes.length; i++) {
+          if (workoutTypes[i] !== 'Rest' && !workoutTypes[i].includes('Recovery')) {
+            workoutTypes[i] = 'Quick ' + (focusArea === 'weight loss' ? 'HIIT' : 'Full Body');
+          }
+        }
+      }
+    }
+    
+    // Generate each day in the program
+    for (let i = 0; i < 7; i++) {
+      const day = daysOfWeek[i];
+      const workoutType = workoutTypes[i];
+      const isRestDay = workoutType.includes('Rest');
+      
+      days.push({
+        day,
+        title: isRestDay ? 'Rest Day' : `${day} - ${workoutType}`,
+        workoutType,
+        isRestDay,
+        exercises: isRestDay ? [] : this.generateExercisesForWorkout(workoutType, level, userPreference, timeConstraint)
+      });
+    }
+    
+    return days;
+  }
+  
+  /**
+   * Generate exercises for specific workout types with preference and time constraint support
+   */
+  private generateExercisesForWorkout(
+    workoutType: string, 
+    level: 'beginner' | 'intermediate' | 'advanced',
+    userPreference: string = '',
+    timeConstraint: number = 0
+  ): Exercise[] {
+    let exercises: Exercise[] = [];
+    let intensity = level === 'beginner' ? 'Low to Medium' : (level === 'intermediate' ? 'Medium' : 'Medium to High');
+    
+    // Sets and reps based on fitness level
+    let sets = level === 'beginner' ? '2-3' : (level === 'intermediate' ? '3-4' : '4-5');
+    let repsStrength = level === 'beginner' ? '10-12' : (level === 'intermediate' ? '8-10' : '6-8');
+    let repsEndurance = level === 'beginner' ? '12-15' : (level === 'intermediate' ? '15-20' : '20-25');
+    
+    // Adjust for time constraints
+    if (timeConstraint > 0 && timeConstraint < 30) {
+      // For shorter workouts, reduce sets but keep intensity
+      sets = level === 'beginner' ? '2' : (level === 'intermediate' ? '2-3' : '3');
+      
+      // If very short workout, focus on compound movements
+      if (timeConstraint < 20 && workoutType.includes('Quick')) {
+        return [
+          { name: 'Jumping Jacks', duration: '1 minute', intensity },
+          { name: 'Burpees', reps: '10', intensity },
+          { name: 'Mountain Climbers', duration: '45 seconds', intensity },
+          { name: 'Air Squats', reps: '15', intensity },
+          { name: 'Push-ups', reps: '10-15', intensity },
+          { name: 'Plank', duration: '30-45 seconds', intensity },
+          { name: 'Rest', duration: '30 seconds', intensity: 'Low' },
+          { name: 'Repeat 2-3 times', duration: '', intensity: '' },
+        ];
+      }
+    }
+    
+    // Adjust exercises based on home/gym preference
+    const isHomeWorkout = userPreference === 'home';
+    
+    // Generate exercises based on workout type
+    switch (workoutType) {
+      case 'Upper Body':
+        exercises = isHomeWorkout ? [
+          { name: 'Push-ups', reps: repsStrength, intensity },
+          { name: 'Pull-ups (or Doorway Rows)', reps: repsStrength, intensity },
+          { name: 'Shoulder Taps', reps: repsStrength, intensity },
+          { name: 'Tricep Dips (using chair)', reps: repsStrength, intensity },
+          { name: 'Pike Push-ups', reps: repsStrength, intensity },
+        ] : [
+          { name: 'Bench Press', reps: repsStrength, intensity },
+          { name: 'Dumbbell Rows', reps: repsStrength, intensity },
+          { name: 'Shoulder Press', reps: repsStrength, intensity },
+          { name: 'Bicep Curls', reps: repsStrength, intensity },
+          { name: 'Tricep Extensions', reps: repsStrength, intensity },
+        ];
+        break;
+      
+      case 'Lower Body':
+        exercises = isHomeWorkout ? [
+          { name: 'Bodyweight Squats', reps: repsStrength, intensity },
+          { name: 'Lunges', reps: repsStrength, intensity },
+          { name: 'Glute Bridges', reps: repsStrength, intensity },
+          { name: 'Calf Raises', reps: repsStrength, intensity },
+          { name: 'Wall Sit', duration: '30-60 seconds', intensity },
+        ] : [
+          { name: 'Squats', reps: repsStrength, intensity },
+          { name: 'Deadlifts', reps: repsStrength, intensity },
+          { name: 'Lunges', reps: repsStrength, intensity },
+          { name: 'Leg Press', reps: repsStrength, intensity },
+          { name: 'Calf Raises', reps: repsStrength, intensity },
+        ];
+        break;
+      
+      case 'Full Body':
+        exercises = isHomeWorkout ? [
+          { name: 'Bodyweight Squats', reps: repsStrength, intensity },
+          { name: 'Push-ups', reps: repsStrength, intensity },
+          { name: 'Plank', duration: '30-60 seconds', intensity },
+          { name: 'Jumping Jacks', duration: '45 seconds', intensity },
+          { name: 'Lunges', reps: repsStrength, intensity },
+        ] : [
+          { name: 'Squats', reps: repsStrength, intensity },
+          { name: 'Push-ups', reps: repsStrength, intensity },
+          { name: 'Plank', duration: '30-60 seconds', intensity },
+          { name: 'Dumbbell Rows', reps: repsStrength, intensity },
+          { name: 'Lunges', reps: repsStrength, intensity },
+        ];
+        break;
+      
+      case 'Push Day':
+        exercises = isHomeWorkout ? [
+          { name: 'Push-ups', reps: repsStrength, intensity },
+          { name: 'Decline Push-ups', reps: repsStrength, intensity },
+          { name: 'Pike Push-ups', reps: repsStrength, intensity },
+          { name: 'Tricep Dips', reps: repsStrength, intensity },
+          { name: 'Diamond Push-ups', reps: repsStrength, intensity },
+        ] : [
+          { name: 'Bench Press', reps: repsStrength, intensity },
+          { name: 'Shoulder Press', reps: repsStrength, intensity },
+          { name: 'Incline Push-ups', reps: repsStrength, intensity },
+          { name: 'Tricep Extensions', reps: repsStrength, intensity },
+          { name: 'Chest Flyes', reps: repsStrength, intensity },
+        ];
+        break;
+      
+      case 'Pull Day':
+        exercises = isHomeWorkout ? [
+          { name: 'Pull-ups (or Doorway Rows)', reps: repsStrength, intensity },
+          { name: 'Bodyweight Rows', reps: repsStrength, intensity },
+          { name: 'Superman Hold', duration: '30 seconds', intensity },
+          { name: 'Bicep Curls (with household items)', reps: repsStrength, intensity },
+          { name: 'Reverse Snow Angels', reps: repsStrength, intensity },
+        ] : [
+          { name: 'Pull-ups', reps: repsStrength, intensity },
+          { name: 'Barbell Rows', reps: repsStrength, intensity },
+          { name: 'Face Pulls', reps: repsStrength, intensity },
+          { name: 'Bicep Curls', reps: repsStrength, intensity },
+          { name: 'Lat Pulldowns', reps: repsStrength, intensity },
+        ];
+        break;
+      
+      case 'Legs Day':
+        exercises = isHomeWorkout ? [
+          { name: 'Bodyweight Squats', reps: repsStrength, intensity },
+          { name: 'Lunges', reps: repsStrength, intensity },
+          { name: 'Glute Bridges', reps: repsStrength, intensity },
+          { name: 'Step-ups (on chair)', reps: repsStrength, intensity },
+          { name: 'Calf Raises', reps: repsStrength, intensity },
+        ] : [
+          { name: 'Squats', reps: repsStrength, intensity },
+          { name: 'Deadlifts', reps: repsStrength, intensity },
+          { name: 'Lunges', reps: repsStrength, intensity },
+          { name: 'Leg Press', reps: repsStrength, intensity },
+          { name: 'Calf Raises', reps: repsStrength, intensity },
+        ];
+        break;
+      
+      case 'Cardio':
+        exercises = [
+          { name: 'Jogging', duration: '20-30 minutes', intensity },
+          { name: 'Jumping Jacks', duration: '2 minutes', intensity },
+          { name: 'Mountain Climbers', duration: '1 minute', intensity },
+          { name: 'High Knees', duration: '1 minute', intensity },
+          { name: 'Burpees', reps: '10-15', intensity },
+        ];
+        break;
+      
+      case 'HIIT':
+        exercises = [
+          { name: 'Burpees', duration: '30 seconds work, 30 seconds rest', intensity },
+          { name: 'Mountain Climbers', duration: '30 seconds work, 30 seconds rest', intensity },
+          { name: 'Jump Squats', duration: '30 seconds work, 30 seconds rest', intensity },
+          { name: 'Push-ups', duration: '30 seconds work, 30 seconds rest', intensity },
+          { name: 'High Knees', duration: '30 seconds work, 30 seconds rest', intensity },
+          { name: 'Rest', duration: '1 minute', intensity: 'Low' },
+          { name: 'Repeat for 3-4 rounds', duration: '', intensity: '' },
+        ];
+        break;
+      
+      case 'Strength':
+        exercises = isHomeWorkout ? [
+          { name: 'Push-ups', reps: repsStrength, intensity },
+          { name: 'Bodyweight Squats', reps: repsStrength, intensity },
+          { name: 'Doorway Rows', reps: repsStrength, intensity },
+          { name: 'Pike Push-ups', reps: repsStrength, intensity },
+          { name: 'Glute Bridges', reps: repsStrength, intensity },
+        ] : [
+          { name: 'Deadlifts', reps: repsStrength, intensity },
+          { name: 'Bench Press', reps: repsStrength, intensity },
+          { name: 'Squats', reps: repsStrength, intensity },
+          { name: 'Overhead Press', reps: repsStrength, intensity },
+          { name: 'Barbell Rows', reps: repsStrength, intensity },
+        ];
+        break;
+      
+      case 'Circuit Training':
+        exercises = [
+          { name: 'Jump Rope (or Jumping Jacks)', duration: '1 minute', intensity },
+          { name: 'Push-ups', reps: repsEndurance, intensity },
+          { name: isHomeWorkout ? 'Bodyweight Squats' : 'Kettlebell Swings', reps: repsEndurance, intensity },
+          { name: isHomeWorkout ? 'Step-ups' : 'Box Jumps', reps: repsEndurance, intensity },
+          { name: 'Plank', duration: '45 seconds', intensity },
+          { name: 'Rest', duration: '1 minute', intensity: 'Low' },
+          { name: 'Repeat for 3-4 rounds', duration: '', intensity: '' },
+        ];
+        break;
+      
+      case 'Active Recovery':
+        exercises = [
+          { name: 'Light Walking', duration: '20-30 minutes', intensity: 'Low' },
+          { name: 'Stretching', duration: '10-15 minutes', intensity: 'Low' },
+          { name: 'Foam Rolling', duration: '5-10 minutes', intensity: 'Low' },
+          { name: 'Yoga', duration: '15-20 minutes', intensity: 'Low' },
+        ];
+        break;
+      
+      case 'Strength & Cardio':
+        exercises = [
+          { name: isHomeWorkout ? 'Bodyweight Squats' : 'Squats', reps: repsStrength, intensity },
+          { name: 'Jump Rope (or Jumping Jacks)', duration: '1 minute', intensity },
+          { name: 'Push-ups', reps: repsStrength, intensity },
+          { name: 'Jumping Jacks', duration: '1 minute', intensity },
+          { name: 'Lunges', reps: repsStrength, intensity },
+          { name: 'High Knees', duration: '1 minute', intensity },
+        ];
+        break;
+      
+      // Yoga and stretching workouts
+      case 'Basic Stretch':
+      case 'Dynamic Stretch':
+      case 'Yoga Flow':
+      case 'Yoga Power':
+      case 'Mobility Work':
+      case 'Stretch & Strengthen':
+        exercises = [
+          { name: 'Cat-Cow Stretch', duration: '1 minute', intensity: 'Low' },
+          { name: 'Downward Dog', duration: '45 seconds', intensity: 'Low to Medium' },
+          { name: 'Child\'s Pose', duration: '30 seconds', intensity: 'Low' },
+          { name: 'Cobra Pose', duration: '30 seconds', intensity: 'Low to Medium' },
+          { name: 'Pigeon Pose', duration: '45 seconds each side', intensity: 'Medium' },
+          { name: 'Warrior Poses', duration: '30 seconds each pose', intensity: 'Medium' },
+        ];
+        break;
+      
+      // Running workouts
+      case 'Walk/Jog':
+      case 'Tempo Run':
+      case 'Interval Run':
+      case 'Easy Run':
+      case 'Long Run':
+      case 'Speed Work':
+      case 'Hill Training':
+      case 'Cross Train':
+        let runDuration = level === 'beginner' ? '15-20 minutes' : (level === 'intermediate' ? '30-40 minutes' : '45-60 minutes');
+        
+        if (workoutType === 'Long Run') {
+          runDuration = level === 'beginner' ? '30 minutes' : (level === 'intermediate' ? '60 minutes' : '90+ minutes');
+        }
+        
+        if (workoutType === 'Walk/Jog') {
+          exercises = [
+            { name: 'Warm-up Walk', duration: '5 minutes', intensity: 'Low' },
+            { name: 'Alternate: 1 min jog, 2 min walk', duration: '20 minutes', intensity: 'Low to Medium' },
+            { name: 'Cool-down Walk', duration: '5 minutes', intensity: 'Low' },
+          ];
+        } else if (workoutType === 'Interval Run') {
+          exercises = [
+            { name: 'Warm-up Jog', duration: '5-10 minutes', intensity: 'Low' },
+            { name: 'Sprint', duration: '30 seconds', intensity: 'High' },
+            { name: 'Recovery Jog', duration: '90 seconds', intensity: 'Low' },
+            { name: 'Repeat 6-10 times', duration: '', intensity: '' },
+            { name: 'Cool-down Jog', duration: '5 minutes', intensity: 'Low' },
+          ];
+        } else if (workoutType === 'Hill Training') {
+          exercises = [
+            { name: 'Warm-up Jog', duration: '10 minutes', intensity: 'Low' },
+            { name: 'Hill Sprint', duration: '30-60 seconds', intensity: 'High' },
+            { name: 'Recovery Walk/Jog Downhill', duration: '1-2 minutes', intensity: 'Low' },
+            { name: 'Repeat 6-8 times', duration: '', intensity: '' },
+            { name: 'Cool-down Jog', duration: '10 minutes', intensity: 'Low' },
+          ];
+        } else if (workoutType === 'Cross Train') {
+          exercises = [
+            { name: 'Cycling', duration: '20 minutes', intensity: 'Medium' },
+            { name: 'Swimming', duration: '20 minutes', intensity: 'Medium' },
+            { name: 'Elliptical', duration: '15 minutes', intensity: 'Medium' },
+          ];
+        } else {
+          exercises = [
+            { name: 'Warm-up Jog', duration: '5-10 minutes', intensity: 'Low' },
+            { name: `${workoutType}`, duration: runDuration, intensity },
+            { name: 'Cool-down Jog', duration: '5 minutes', intensity: 'Low' },
+            { name: 'Stretching', duration: '5-10 minutes', intensity: 'Low' },
+          ];
+        }
+        break;
+        
+      case 'Quick HIIT':
+        exercises = [
+          { name: 'Jumping Jacks', duration: '30 seconds', intensity },
+          { name: 'Air Squats', duration: '30 seconds', intensity },
+          { name: 'Push-ups', duration: '30 seconds', intensity },
+          { name: 'Mountain Climbers', duration: '30 seconds', intensity },
+          { name: 'Rest', duration: '30 seconds', intensity: 'Low' },
+          { name: 'Repeat 2-3 times', duration: '', intensity: '' },
+        ];
+        break;
+        
+      case 'Quick Full Body':
+        exercises = [
+          { name: 'Bodyweight Squats', reps: '15', intensity },
+          { name: 'Push-ups', reps: '10', intensity },
+          { name: 'Jumping Jacks', duration: '45 seconds', intensity },
+          { name: 'Plank', duration: '30 seconds', intensity },
+          { name: 'Rest', duration: '30 seconds', intensity: 'Low' },
+          { name: 'Repeat 2-3 times', duration: '', intensity: '' },
+        ];
+        break;
+      
+      default:
+        // Generic workout as fallback
+        exercises = isHomeWorkout ? [
+          { name: 'Jumping Jacks', duration: '2 minutes', intensity },
+          { name: 'Push-ups', reps: repsStrength, intensity },
+          { name: 'Squats', reps: repsStrength, intensity },
+          { name: 'Plank', duration: '30-60 seconds', intensity },
+          { name: 'Mountain Climbers', duration: '1 minute', intensity },
+        ] : [
+          { name: 'Treadmill Warm-up', duration: '5 minutes', intensity: 'Low' },
+          { name: 'Dumbbell Squats', reps: repsStrength, intensity },
+          { name: 'Bench Press', reps: repsStrength, intensity },
+          { name: 'Cable Rows', reps: repsStrength, intensity },
+          { name: 'Plank', duration: '45-60 seconds', intensity },
+        ];
+    }
+    
+    return exercises;
   }
   
   /**
@@ -177,16 +785,18 @@ class AICoachService {
       exercises = exercises.map(ex => ({
         ...ex,
         intensity: ex.intensity === 'Medium' ? 'High' : ex.intensity,
-        reps: ex.reps ? `${parseInt(ex.reps) + 5}` : ex.reps,
-        duration: ex.duration ? `${parseInt(ex.duration) + 15} seconds` : ex.duration
+        reps: ex.reps ? `${parseInt(ex.reps.split('-')[0]) + 5}` : ex.reps,
+        duration: ex.duration && ex.duration.includes('seconds') ? 
+          `${parseInt(ex.duration) + 15} seconds` : ex.duration
       }));
     } else if (isGentleRequest) {
       workoutTitle += ' (Beginner Friendly)';
       exercises = exercises.map(ex => ({
         ...ex,
         intensity: ex.intensity === 'High' ? 'Medium' : (ex.intensity === 'Medium' ? 'Low' : ex.intensity),
-        reps: ex.reps ? `${Math.max(parseInt(ex.reps) - 5, 5)}` : ex.reps,
-        duration: ex.duration ? `${Math.max(parseInt(ex.duration) - 15, 15)} seconds` : ex.duration
+        reps: ex.reps ? `${Math.max(parseInt(ex.reps.split('-')[0]) - 5, 5)}` : ex.reps,
+        duration: ex.duration && ex.duration.includes('seconds') ? 
+          `${Math.max(parseInt(ex.duration) - 15, 15)} seconds` : ex.duration
       }));
     }
     
@@ -385,7 +995,7 @@ class AICoachService {
     let currentWeight = 'current';
     if (userData && userData.weight && userData.dailyCalorieGoal) {
       currentWeight = userData.weight.toString();
-      calorieDeficit = (userData.dailyCalorieGoal * 0.2).toFixed(0);
+      calorieDeficit = Math.round(userData.dailyCalorieGoal * 0.2).toString();
     }
     
     return {
