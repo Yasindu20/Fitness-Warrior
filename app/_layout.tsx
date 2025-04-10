@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { SafeAreaView, StyleSheet, View, Text, ActivityIndicator } from "react-native";
 import { createStackNavigator } from "@react-navigation/stack";
 import * as tf from '@tensorflow/tfjs';
+import { RootStackParamList } from "../types/navigation";
+
 import Login from "./login";
 import Signup from "./signup";
 import UserBioForm from "./UserBioForm";
@@ -16,7 +18,17 @@ import FitnessAnalyticsScreen from "../screens/FitnessAnalyticsScreen";
 import CoachScreen from "../screens/CoachScreen";
 import { preloadAnimations } from "@/utils/AnimationPreloader";
 
-const Stack = createStackNavigator();
+// Import community screens
+import CommunityLeaderboards from "../screens/community/CommunityLeaderboards";
+import TeamDetailScreen from "../screens/community/TeamDetailScreen";
+import ChallengeDetailScreen from "../screens/community/ChallengeDetailScreen";
+import FriendSearchScreen from "../screens/community/FriendSearchScreen";
+import CreateTeamScreen from "../screens/community/CreateTeamScreen";
+import TeamsScreen from "../screens/community/TeamsScreen";
+import ChallengesScreen from "../screens/community/ChallengesScreen";
+import CommunityActivityFeed from "../screens/community/CommunityActivityFeed";
+
+const Stack = createStackNavigator<RootStackParamList>();
 
 export default function AuthLayout() {
   const [isTfReady, setIsTfReady] = useState(false);
@@ -79,6 +91,16 @@ export default function AuthLayout() {
           
           {/* AI Coach screen */}
           <Stack.Screen name="coach" component={CoachScreen} />
+          
+          {/* Community/Leaderboard Screens */}
+          <Stack.Screen name="community-leaderboards" component={CommunityLeaderboards} />
+          <Stack.Screen name="team-detail" component={TeamDetailScreen} />
+          <Stack.Screen name="challenge-detail" component={ChallengeDetailScreen} />
+          <Stack.Screen name="friend-search" component={FriendSearchScreen} />
+          <Stack.Screen name="create-team" component={CreateTeamScreen} />
+          <Stack.Screen name="teams" component={TeamsScreen} />
+          <Stack.Screen name="challenges" component={ChallengesScreen} />
+          <Stack.Screen name="activity-feed" component={CommunityActivityFeed} />
         </Stack.Navigator>
       </View>
     </SafeAreaView>

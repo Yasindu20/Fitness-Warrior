@@ -5,9 +5,11 @@ import {
   TouchableOpacity, 
   StyleSheet, 
   ScrollView,
-  ActivityIndicator
+  ActivityIndicator,
+  ImageBackground
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from './firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import { useFocusEffect } from '@react-navigation/native'; 
@@ -23,6 +25,7 @@ export default function MainMenu({ navigation }: { navigation: any }) {
   const [todaySteps, setTodaySteps] = useState(0);
   const [todayCalories, setTodayCalories] = useState(0);
   const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [userRank, setUserRank] = useState<number | null>(null);
   
   const username = auth.currentUser?.displayName || 'User';
 
@@ -67,6 +70,10 @@ export default function MainMenu({ navigation }: { navigation: any }) {
       // Get personalized recommendations
       const recs = await RecommendationsService.getActiveRecommendations();
       setRecommendations(recs.slice(0, 1)); // Just get the top recommendation
+      
+      // Get user's global rank (mock for now)
+      // In a real app, you would get this from your community service
+      setUserRank(Math.floor(Math.random() * 100) + 1);
     } catch (error) {
       console.error('Error loading user data:', error);
     } finally {
@@ -134,7 +141,12 @@ export default function MainMenu({ navigation }: { navigation: any }) {
   return (
     <ScrollView style={styles.container}>
       {/* Header with User Greeting */}
-      <View style={styles.header}>
+      <LinearGradient
+        colors={['#6200ee', '#9c64f4']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <Text style={styles.greeting}>Hello, {username}!</Text>
         <Text style={styles.subGreeting}>What would you like to track today?</Text>
         
@@ -162,7 +174,23 @@ export default function MainMenu({ navigation }: { navigation: any }) {
         ) : (
           <ActivityIndicator color="#fff" style={{ marginTop: 20 }} />
         )}
-      </View>
+        
+        {/* Community Rank - NEW */}
+        {userRank && (
+          <View style={styles.rankContainer}>
+            <Text style={styles.rankLabel}>Your Global Rank</Text>
+            <View style={styles.rankBadge}>
+              <Text style={styles.rankText}>#{userRank}</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.viewLeaderboardButton}
+              onPress={() => navigation.navigate('community-leaderboards')}
+            >
+              <Text style={styles.viewLeaderboardText}>View Leaderboard</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </LinearGradient>
       
       {/* Main Menu Options */}
       <View style={styles.menuSection}>
@@ -197,11 +225,75 @@ export default function MainMenu({ navigation }: { navigation: any }) {
         </TouchableOpacity>
       </View>
       
+      {/* Community Section - NEW */}
+      <View style={styles.menuSection}>
+        <Text style={styles.sectionTitle}>Community</Text>
+        
+        <TouchableOpacity 
+          style={[styles.menuItem, { backgroundColor: '#e3f2fd' }]} 
+          onPress={() => navigation.navigate('community-leaderboards')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#bbdefb' }]}>
+            <Ionicons name="trophy-outline" size={28} color="#1976D2" />
+          </View>
+          <View style={styles.menuContent}>
+            <View style={styles.newFeatureTag}>
+              <Text style={styles.newFeatureText}>NEW</Text>
+            </View>
+            <Text style={[styles.menuText, { color: '#1976D2' }]}>Leaderboards</Text>
+            <Text style={styles.description}>Compare your progress with others globally and locally</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#1976D2" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.menuItem, { backgroundColor: '#f1f8e9' }]} 
+          onPress={() => navigation.navigate('friend-search')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#dcedc8' }]}>
+            <Ionicons name="people-outline" size={28} color="#7CB342" />
+          </View>
+          <View style={styles.menuContent}>
+            <Text style={[styles.menuText, { color: '#7CB342' }]}>Friends</Text>
+            <Text style={styles.description}>Connect with friends and compete together</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#7CB342" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.menuItem, { backgroundColor: '#ede7f6' }]} 
+          onPress={() => navigation.navigate('teams')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#d1c4e9' }]}>
+            <Ionicons name="people-circle-outline" size={28} color="#7E57C2" />
+          </View>
+          <View style={styles.menuContent}>
+            <Text style={[styles.menuText, { color: '#7E57C2' }]}>Teams</Text>
+            <Text style={styles.description}>Join or create teams to achieve group goals</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#7E57C2" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.menuItem, { backgroundColor: '#fff3e0' }]} 
+          onPress={() => navigation.navigate('challenges')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#ffe0b2' }]}>
+            <Ionicons name="flame-outline" size={28} color="#FF9800" />
+          </View>
+          <View style={styles.menuContent}>
+            <Text style={[styles.menuText, { color: '#FF9800' }]}>Challenges</Text>
+            <Text style={styles.description}>Participate in exciting fitness challenges</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#FF9800" />
+        </TouchableOpacity>
+      </View>
+      
       {/* Personalized Features */}
       <View style={styles.menuSection}>
         <Text style={styles.sectionTitle}>Personalized Features</Text>
         
-        {/* AI Coach Menu Item - NEW */}
+        {/* AI Coach Menu Item */}
         <TouchableOpacity 
           style={[styles.menuItem, { backgroundColor: '#e6f2ff' }]} 
           onPress={() => navigation.navigate('coach')}
@@ -210,9 +302,6 @@ export default function MainMenu({ navigation }: { navigation: any }) {
             <Ionicons name="fitness-outline" size={28} color="#0066CC" />
           </View>
           <View style={styles.menuContent}>
-            <View style={styles.newFeatureTag}>
-              <Text style={styles.newFeatureText}>NEW</Text>
-            </View>
             <Text style={[styles.menuText, { color: '#0066CC' }]}>AI Fitness Coach</Text>
             <Text style={styles.description}>Get personalized fitness advice and demonstrations</Text>
           </View>
@@ -295,10 +384,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
-    backgroundColor: '#6200ee',
     padding: 20,
     paddingTop: 60,
     paddingBottom: 30,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   greeting: {
     fontSize: 24,
@@ -331,6 +426,40 @@ const styles = StyleSheet.create({
   statLabel: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 12,
+  },
+  rankContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 15,
+    padding: 15,
+  },
+  rankLabel: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    marginBottom: 5,
+  },
+  rankBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 10,
+  },
+  rankText: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  viewLeaderboardButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  viewLeaderboardText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   menuSection: {
     margin: 16,
@@ -417,7 +546,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -5,
     right: -5,
-    backgroundColor: '#0066CC',
+    backgroundColor: '#f44336',
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
