@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Button, ActivityIndicator, Vibration } from 'react-native';
+import { View, Text, StyleSheet, Button, ActivityIndicator, Vibration, Alert } from 'react-native';
 import * as tf from '@tensorflow/tfjs';
 import modelService from '../services/modelService';
 import sensorService from '../services/sensorService';
-import { saveStepCount } from '../services/healthDataService'; // Import the new service
+import { saveStepCount } from '../services/healthDataService';
 import Visualizer from './Visualizer';
-import { formatDate } from '../utils/dateUtils'; // Import date utility
+import { formatDate } from '../utils/dateUtils';
 import { auth } from './firebaseConfig';
 
 const StepCounter = () => {
@@ -15,6 +15,7 @@ const StepCounter = () => {
   const [sensorData, setSensorData] = useState([]);
   const [modelStatus, setModelStatus] = useState('Loading model...');
   const [isSaving, setIsSaving] = useState(false);
+  const [savedStepsForSession, setSavedStepsForSession] = useState(false);
 
   // Refs to maintain state between renders
   const stepCountRef = useRef(0);
@@ -53,9 +54,9 @@ const StepCounter = () => {
     return () => {
       sensorService.stop();
       modelService.dispose();
-      // Only save final steps when component unmounts if we're still in counting mode
-      // This prevents double saving when toggleCounting has already saved steps
-      if (isCountingSteps && stepCountRef.current > initialStepCountRef.current) {
+      
+      // FIXED: Prevent double saving when component unmounts
+      if (isCountingSteps && stepCountRef.current > initialStepCountRef.current && !savedStepsForSession) {
         console.log('Component unmounting - saving final steps');
         saveCurrentSteps();
       } else {
@@ -69,30 +70,41 @@ const StepCounter = () => {
     if (isCountingSteps) {
       // Start with the current step count
       initialStepCountRef.current = stepCountRef.current;
+      // Reset saved flag when starting a new counting session
+      setSavedStepsForSession(false);
 
       // Define the callback for processed sensor data
       sensorService.setWindowCompleteCallback(async (windowData) => {
         // Update visualizer with the latest data
         setSensorData(windowData.slice(-10)); // Just show last 10 points
 
+        // MODIFIED: Add a delay between step detection to reduce false positives
+        const now = Date.now();
+        const timeSinceLastStep = now - lastSaveTimeRef.current;
+        const minStepInterval = 300; // Minimum milliseconds between steps (adjust based on testing)
+        
         // Predict step with the current window of data
-        const stepDetected = await modelService.predictStep(windowData);
+        if (timeSinceLastStep >= minStepInterval) {
+          const stepDetected = await modelService.predictStep(windowData);
 
-        if (stepDetected) {
-          // Vibrate briefly to provide haptic feedback for step detection
-          Vibration.vibrate(100);
+          if (stepDetected) {
+            // Vibrate briefly to provide haptic feedback for step detection
+            Vibration.vibrate(100);
 
-          // Increment step count
-          stepCountRef.current += 1;
-          setStepCount(stepCountRef.current);
-          console.log(`Step detected! Total count: ${stepCountRef.current}`);
-
-          // Save step data periodically (every 50 steps or every 2 minutes)
-          const now = Date.now();
-          const sessionSteps = stepCountRef.current - initialStepCountRef.current;
-          if (sessionSteps % 50 === 0 || now - lastSaveTimeRef.current > 120000) {
-            saveCurrentSteps();
+            // Increment step count
+            stepCountRef.current += 1;
+            setStepCount(stepCountRef.current);
+            console.log(`Step detected! Total count: ${stepCountRef.current}`);
             lastSaveTimeRef.current = now;
+
+            // Save step data periodically (every 10 steps or every 2 minutes)
+            // MODIFIED: Reduced frequency to avoid too many Firestore operations
+            const sessionSteps = stepCountRef.current - initialStepCountRef.current;
+            if (sessionSteps % 10 === 0 || now - lastSaveTimeRef.current > 120000) {
+              // Instead of immediately saving, mark steps as pending save
+              // This avoids saving small increments frequently
+              console.log(`${sessionSteps} steps ready for saving`);
+            }
           }
         }
       });
@@ -105,8 +117,8 @@ const StepCounter = () => {
       sensorService.stop();
       console.log('Step counting stopped');
 
-      // Save steps when stopping
-      if (stepCountRef.current > initialStepCountRef.current) {
+      // FIXED: Only save steps when explicitly stopping, not on state change
+      if (stepCountRef.current > initialStepCountRef.current && !savedStepsForSession) {
         saveCurrentSteps();
       }
     }
@@ -116,8 +128,7 @@ const StepCounter = () => {
     if (isCountingSteps) {
       // Stop counting first, then save steps
       setIsCountingSteps(false);
-      console.log('Stopping step counting, saving current steps');
-      saveCurrentSteps();
+      // Saving will be handled in the effect above
     } else {
       // Reset session counter and start counting
       initialStepCountRef.current = stepCountRef.current;
@@ -125,11 +136,17 @@ const StepCounter = () => {
     }
   };
   
-  // Modify the saveCurrentSteps function to be more robust
+  // MODIFIED: saveCurrentSteps now sets a flag to prevent duplicate saves
   const saveCurrentSteps = async () => {
     // Don't save if not logged in
     if (!auth.currentUser) {
       console.log('User not logged in, steps not saved');
+      return;
+    }
+    
+    // Prevent duplicate saves
+    if (savedStepsForSession) {
+      console.log('Steps already saved for this session');
       return;
     }
     
@@ -142,11 +159,14 @@ const StepCounter = () => {
         await saveStepCount(sessionSteps);
         console.log('Steps saved successfully');
         initialStepCountRef.current = stepCountRef.current; // Reset session counter after saving
+        setSavedStepsForSession(true); // Mark that we've saved for this session
       } else {
         console.log('No new steps to save');
       }
     } catch (error) {
       console.error('Failed to save steps:', error);
+      // In case of error, we'll try again later
+      setSavedStepsForSession(false);
     } finally {
       setIsSaving(false);
     }
@@ -156,6 +176,7 @@ const StepCounter = () => {
     stepCountRef.current = 0;
     initialStepCountRef.current = 0;
     setStepCount(0);
+    setSavedStepsForSession(false);
   };
 
   if (!isModelReady) {

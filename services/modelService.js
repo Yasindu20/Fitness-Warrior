@@ -18,7 +18,7 @@ class ModelService {
         this.motionBufferSize = 8; // Increased from 5 to 8 for more stable motion detection
         this.isInMotion = false; // Track if user is in motion
         this.debugMode = true; // Set to true to see more detailed logs
-        
+
         // New: Add peak detection to identify real steps
         this.peakDetection = {
             values: [],
@@ -26,7 +26,7 @@ class ModelService {
             minPeakHeight: 0.12, // Lowered to detect more peaks
             minPeakDistance: 6 // Reduced to detect steps that are closer together
         };
-        
+
         // New: Add step pattern matching
         this.stepPatternMatching = {
             enabled: true,
@@ -184,73 +184,73 @@ class ModelService {
         const accelX = windowData.map(d => d[0]);
         const accelY = windowData.map(d => d[1]);
         const accelZ = windowData.map(d => d[2]);
-        
+
         // Calculate variance for each axis
         const varX = this.calculateVariance(accelX);
         const varY = this.calculateVariance(accelY);
         const varZ = this.calculateVariance(accelZ);
-        
+
         // Sum of variances as motion intensity
         const sumAccelVar = varX + varY + varZ;
-        
+
         // New: Calculate vertical acceleration for better step detection
         const verticalAcceleration = this.calculateVerticalAcceleration(accelX, accelY, accelZ);
-        
+
         if (this.debugMode) {
             console.log(`Motion details - varX: ${varX.toFixed(6)}, varY: ${varY.toFixed(6)}, varZ: ${varZ.toFixed(6)}, total: ${sumAccelVar.toFixed(6)}, vertical: ${verticalAcceleration.toFixed(6)}`);
         }
-        
+
         // Update peak detection buffer
         this.updatePeakDetectionBuffer(verticalAcceleration);
-        
+
         return sumAccelVar;
     }
-    
+
     // New: Calculate vertical acceleration component
     calculateVerticalAcceleration(accelX, accelY, accelZ) {
         // Get the magnitude of total acceleration for each sample
         const magnitudes = accelX.map((x, i) => {
             const y = accelY[i];
             const z = accelZ[i];
-            return Math.sqrt(x*x + y*y + z*z);
+            return Math.sqrt(x * x + y * y + z * z);
         });
-        
+
         // Compute the mean
         const mean = magnitudes.reduce((sum, val) => sum + val, 0) / magnitudes.length;
-        
+
         // Remove gravity (1g) and compute variance of the resulting signal
         const verticalComponents = magnitudes.map(m => m - mean);
-        
+
         // Return the variance of the vertical components
         return this.calculateVariance(verticalComponents);
     }
-    
+
     // New: Update the peak detection buffer
     updatePeakDetectionBuffer(value) {
         this.peakDetection.values.push(value);
-        
+
         // Keep buffer at desired size
         if (this.peakDetection.values.length > this.peakDetection.bufferSize) {
             this.peakDetection.values.shift();
         }
     }
-    
+
     // New: Detect if there's a peak in the current buffer
     detectPeak() {
         // Need enough data
         if (this.peakDetection.values.length < this.peakDetection.bufferSize) {
             return false;
         }
-        
+
         // Get center value (which we're checking if it's a peak)
         const centerIndex = Math.floor(this.peakDetection.bufferSize / 2);
         const centerValue = this.peakDetection.values[centerIndex];
-        
+
         // Check if center value is high enough to be a potential peak
         if (centerValue < this.peakDetection.minPeakHeight) {
             return false;
         }
-        
+
         // Check if center is higher than surrounding points
         for (let i = 1; i <= this.peakDetection.minPeakDistance; i++) {
             if (centerIndex - i >= 0) {
@@ -258,37 +258,37 @@ class ModelService {
                     return false;
                 }
             }
-            
+
             if (centerIndex + i < this.peakDetection.values.length) {
                 if (this.peakDetection.values[centerIndex + i] >= centerValue) {
                     return false;
                 }
             }
         }
-        
+
         // It's a peak!
         console.log(`Peak detected! Value: ${centerValue.toFixed(6)}`);
         return true;
     }
-    
+
     // Helper function to calculate variance
     calculateVariance(array) {
         const n = array.length;
         if (n === 0) return 0;
-        
+
         // Calculate mean
         const mean = array.reduce((sum, val) => sum + val, 0) / n;
-        
+
         // Calculate sum of squared differences from mean
         const squaredDiffSum = array.reduce((sum, val) => {
             const diff = val - mean;
             return sum + (diff * diff);
         }, 0);
-        
+
         // Return variance
         return squaredDiffSum / n;
     }
-    
+
     // Check if user is in motion based on recent motion intensity
     updateMotionState(motionIntensity) {
         // Add to buffer and maintain buffer size
@@ -296,20 +296,20 @@ class ModelService {
         if (this.motionBuffer.length > this.motionBufferSize) {
             this.motionBuffer.shift();
         }
-        
+
         // Calculate average motion intensity
-        const avgMotion = this.motionBuffer.reduce((sum, val) => sum + val, 0) / 
-                          this.motionBuffer.length;
-        
+        const avgMotion = this.motionBuffer.reduce((sum, val) => sum + val, 0) /
+            this.motionBuffer.length;
+
         // Update motion state
         const previousMotionState = this.isInMotion;
         this.isInMotion = avgMotion > this.motionDetectionThreshold;
-        
+
         // Log motion state changes
         if (this.isInMotion !== previousMotionState) {
             console.log(`Motion state changed to: ${this.isInMotion ? 'MOVING' : 'STATIONARY'}, avg motion: ${avgMotion.toFixed(6)}, threshold: ${this.motionDetectionThreshold}`);
         }
-        
+
         return this.isInMotion;
     }
 
@@ -318,7 +318,7 @@ class ModelService {
             console.log('Model is not ready yet');
             return false;
         }
-      
+
         try {
             // Make sure windowData is properly shaped
             // First, ensure it's an array with shape [50, 6]
@@ -326,20 +326,20 @@ class ModelService {
                 console.warn('Input data must have 50 time steps, got', windowData.length);
                 return false;
             }
-        
+
             // Verify each time step has 6 features
-            const allHaveSixFeatures = windowData.every(step => 
+            const allHaveSixFeatures = windowData.every(step =>
                 Array.isArray(step) && step.length === 6);
-            
+
             if (!allHaveSixFeatures) {
                 console.warn('Each time step must have 6 features');
                 return false;
             }
-            
+
             // Calculate motion intensity and update motion state
             const motionIntensity = this.calculateMotionIntensity(windowData);
             const isInMotion = this.updateMotionState(motionIntensity);
-            
+
             // Only process for step detection if in motion
             if (!isInMotion) {
                 console.log('No significant motion detected, skipping step detection');
@@ -349,27 +349,27 @@ class ModelService {
 
             // Check if we have a peak in the signal
             const hasPeak = this.detectPeak();
-            
+
             // Create tensor with explicit shape to ensure it's 3D
             const inputTensor = tf.tensor3d([windowData], [1, 50, 6]);
-            
+
             // Run prediction
             const prediction = this.model.predict(inputTensor);
             const predictionValue = prediction.dataSync()[0];
-            
-            console.log('Step prediction value:', predictionValue, 
-                       'Motion intensity:', motionIntensity.toFixed(6),
-                       'Consecutive highs:', this.consecutiveHighPredictions,
-                       'Has peak:', hasPeak);
-            
+
+            console.log('Step prediction value:', predictionValue,
+                'Motion intensity:', motionIntensity.toFixed(6),
+                'Consecutive highs:', this.consecutiveHighPredictions,
+                'Has peak:', hasPeak);
+
             // Clean up tensors
             inputTensor.dispose();
             prediction.dispose();
-            
-            // Apply refractory period check
+
+            // Apply refractory period check - MODIFIED: Set to 700ms (balanced value)
             const currentTime = new Date().getTime();
-            const timeCheck = (currentTime - this.lastStepTime) > this.refractoryPeriod;
-            
+            const timeCheck = (currentTime - this.lastStepTime) > 700;
+
             // Track consecutive high predictions
             if (predictionValue > this.predictionThreshold) {
                 this.consecutiveHighPredictions++;
@@ -379,45 +379,36 @@ class ModelService {
                     this.consecutiveHighPredictions = 0;
                 }
             }
-            
-            // Enhanced step detection logic:
-            // 1. Must have enough consecutive high predictions
-            // 2. Must be past the refractory period
-            // 3. Consider peak detection but don't require it
-            const hasEnoughConsecutiveHighs = this.consecutiveHighPredictions >= this.requiredConsecutiveHighs;
-            
-            // Step detection criteria - relaxed for better sensitivity:
-            // - Either prediction value is above threshold (primary method)
-            // - Enhanced with peak detection when available
+
+            // MODIFIED: Balanced step detection criteria that works with your device
+            // 1. Either prediction value above threshold with enough consecutive highs
+            // 2. OR peak detection when prediction is close to threshold
+            // 3. Must be past the refractory period
+            const hasEnoughConsecutiveHighs = this.consecutiveHighPredictions >= 1; // Only need 1 consecutive reading
+
             let stepDetected = false;
-            
+
             if (timeCheck) {
                 // Primary detection method: prediction value above threshold
                 if (predictionValue > this.predictionThreshold) {
-                    // If we also have a peak, it's even more certain
-                    if (hasPeak) {
+                    if (hasEnoughConsecutiveHighs) {
                         stepDetected = true;
-                        console.log('Step detected by peak and threshold!');
-                    } 
-                    // Still count the step even without a peak if we have consecutive high predictions
-                    else if (hasEnoughConsecutiveHighs) {
-                        stepDetected = true;
-                        console.log('Step detected by consecutive high predictions!');
+                        console.log('Step detected by prediction threshold!');
                     }
                 }
-                // Backup detection: strong peak even if prediction is slightly below threshold
+                // Secondary method: strong peak with prediction close to threshold
                 else if (hasPeak && predictionValue > (this.predictionThreshold * 0.9)) {
                     stepDetected = true;
-                    console.log('Step detected by strong peak pattern!');
+                    console.log('Step detected by acceleration peak!');
                 }
             }
-            
+
             if (stepDetected) {
                 this.lastStepTime = currentTime;
                 this.consecutiveHighPredictions = 0; // Reset after detecting a step
                 return true;
             }
-            
+
             return false;
         } catch (error) {
             console.error('Prediction error:', error);

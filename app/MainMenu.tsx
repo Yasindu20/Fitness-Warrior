@@ -100,11 +100,25 @@ export default function MainMenu({ navigation }: { navigation: any }) {
       );
       
       const stepSnapshot = await getDocs(stepQuery);
-      stepSnapshot.forEach(doc => {
-        steps += doc.data().steps || 0;
-      });
       
-      console.log(`Found ${steps} steps directly from step history for today (${today})`);
+      // MODIFIED: Check if we have any entries
+      if (!stepSnapshot.empty) {
+        // MODIFIED: Use only the most recent entry instead of summing multiple entries
+        // Sort documents by timestamp to get the most recent
+        const sortedDocs = stepSnapshot.docs.sort((a, b) => {
+          const timestampA = a.data().timestamp?.toMillis() || 0;
+          const timestampB = b.data().timestamp?.toMillis() || 0;
+          return timestampB - timestampA; // Sort in descending order (newest first)
+        });
+        
+        // Use the most recent document
+        const latestDoc = sortedDocs[0];
+        steps = latestDoc.data().steps || 0;
+        
+        console.log(`Found ${steps} steps directly from step history for today (${today})`);
+      } else {
+        console.log('No steps found in history for today');
+      }
       
       // Still check goals as a backup if no steps found in history
       if (steps === 0) {

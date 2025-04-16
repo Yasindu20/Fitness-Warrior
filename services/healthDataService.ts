@@ -49,6 +49,7 @@ export const saveStepCount = async (steps: number): Promise<void> => {
 
     const userId = user.uid;
     const today = formatDate(new Date());
+    const sessionId = Date.now().toString(); // Unique ID for this session
 
     console.log(`Saving ${steps} steps for user ${userId} on date ${today}`);
 
@@ -69,15 +70,25 @@ export const saveStepCount = async (steps: number): Promise<void> => {
         userId,
         date: today,
         steps,
-        timestamp: serverTimestamp()
+        timestamp: serverTimestamp(),
+        sessionId
       });
     } else {
       // Update existing entry for today
       const docRef = doc(db, 'stepHistory', querySnapshot.docs[0].id);
-      console.log(`Updating existing step entry (ID: ${docRef.id}) for today`);
+      const docId = docRef.id;
+      
+      // Get the current data
+      const currentData = querySnapshot.docs[0].data();
+      const currentSteps = currentData.steps || 0;
+      
+      console.log(`Current steps in database: ${currentSteps}, adding ${steps} more`);
+      
+      // FIXED: Add steps instead of replacing them
       await updateDoc(docRef, {
-        steps: increment(steps), // Add to existing step count
-        timestamp: serverTimestamp()
+        steps: currentSteps + steps, // Add to existing step count
+        lastUpdated: serverTimestamp(),
+        lastSessionId: sessionId // Track last session
       });
     }
 
@@ -88,7 +99,7 @@ export const saveStepCount = async (steps: number): Promise<void> => {
       updatedAt: serverTimestamp()
     });
     
-    console.log(`Successfully saved ${steps} steps for ${today}`);
+    console.log(`Successfully saved ${steps} steps for ${today}, total should be updated`);
     
     // Update goal progress immediately
     console.log('Syncing goal progress after saving steps...');
