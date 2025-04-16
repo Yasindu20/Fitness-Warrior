@@ -3,6 +3,8 @@ import { SafeAreaView, StyleSheet, View, Text, ActivityIndicator } from "react-n
 import { createStackNavigator } from "@react-navigation/stack";
 import * as tf from '@tensorflow/tfjs';
 import { RootStackParamList } from "../types/navigation";
+import { db, auth } from "./firebaseConfig";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
 import Login from "./login";
 import Signup from "./signup";
@@ -54,6 +56,42 @@ export default function AuthLayout() {
       }
     };
     initTensorFlow();
+  
+    const migrateUserDisplayNames = async () => {
+      if (!auth.currentUser) return;
+      
+      // Check if user document exists and has a displayName
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (!userDoc.exists()) {
+        // Document doesn't exist, create it with setDoc
+        await setDoc(userRef, {
+          displayName: auth.currentUser.displayName || 'User',
+          totalSteps: 0,
+          totalCalories: 0,
+          totalDistance: 0,
+          totalActiveMinutes: 0,
+          createdAt: new Date()
+        });
+      } else if (!userDoc.data().displayName) {
+        // Document exists but has no displayName, update it
+        await updateDoc(userRef, {
+          displayName: auth.currentUser.displayName || 'User'
+        });
+      }
+    };
+  
+    // Set up a listener for auth state changes
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        // User is signed in, call migration function
+        await migrateUserDisplayNames();
+      }
+    });
+    
+    // Clean up the listener when component unmounts
+    return () => unsubscribe();
   }, []);
 
   // Show loading indicator while TensorFlow initializes

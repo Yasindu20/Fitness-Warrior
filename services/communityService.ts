@@ -36,6 +36,14 @@ import {
     tier?: string;
     friends?: string[];
   }
+
+  export interface FriendRequest {
+    id: string;
+    userId: string;
+    displayName: string;
+    status: 'pending' | 'accepted' | 'declined' | 'requested';
+    avatar?: string;
+  }
   
   export interface Team {
     id: string;
@@ -333,6 +341,92 @@ import {
         return true;
       } catch (error) {
         console.error("Error handling friend request:", error);
+        throw error;
+      }
+    }
+
+    async searchUsers(searchQuery: string): Promise<CommunityUser[]> {
+      try {
+        if (!auth.currentUser) return [];
+        
+        // Get a reference to all users
+        const usersRef = collection(db, 'users');
+        const usersSnapshot = await getDocs(usersRef);
+        const allUsers: CommunityUser[] = [];
+        
+        // Convert the query to lowercase for case-insensitive comparison
+        const queryLower = searchQuery.toLowerCase();
+        
+        usersSnapshot.forEach((doc) => {
+          const userData = doc.data();
+          // Skip the current user
+          if (doc.id === auth.currentUser?.uid) return;
+          
+          // Check if displayName contains the search query (case insensitive)
+          if (userData.displayName && 
+              userData.displayName.toLowerCase().includes(queryLower)) {
+            allUsers.push({
+              id: doc.id,
+              displayName: userData.displayName || 'Anonymous',
+              totalSteps: userData.totalSteps || 0,
+              totalCalories: userData.totalCalories || 0,
+              totalDistance: userData.totalDistance || 0,
+              totalActiveMinutes: userData.totalActiveMinutes || 0,
+              avatar: userData.avatar || null,
+              streak: userData.streak || 0,
+              tier: calculateTier(userData.totalSteps || 0),
+            });
+          }
+        });
+        
+        return allUsers;
+      } catch (error) {
+        console.error("Error searching users:", error);
+        throw error;
+      }
+    }
+
+    async getFriendRequests(): Promise<FriendRequest[]> {
+      try {
+        if (!auth.currentUser) return [];
+        
+        const userId = auth.currentUser.uid;
+        
+        // Query for pending friend requests where this user is the receiver
+        const requestsQuery = query(
+          collection(db, 'friendRequests'),
+          where('receiverId', '==', userId),
+          where('status', '==', 'pending'),
+          orderBy('createdAt', 'desc')
+        );
+        
+        const requestsSnapshot = await getDocs(requestsQuery);
+        const requests: FriendRequest[] = [];
+        
+        // Process each request document
+        for (const docSnap of requestsSnapshot.docs) {
+          const requestData = docSnap.data();
+          
+          // Get sender's user profile to display their name
+          const senderRef = doc(db, 'users', requestData.senderId);
+          const senderDoc = await getDoc(senderRef);
+          
+          if (senderDoc.exists()) {
+            const senderData = senderDoc.data();
+            
+            requests.push({
+              id: docSnap.id,
+              userId: requestData.senderId,
+              displayName: senderData.displayName || 'Unknown User',
+              status: 'pending',
+              avatar: senderData.avatar, // Include avatar if available
+            });
+          }
+        }
+        
+        return requests;
+      } catch (error) {
+        console.error("Error fetching friend requests:", error);
         throw error;
       }
     }

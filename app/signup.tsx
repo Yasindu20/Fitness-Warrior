@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
-import { auth } from "./firebaseConfig"; 
+import { auth } from "./firebaseConfig";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { db } from "./firebaseConfig";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Signup({ navigation }: { navigation: any }) {
   const [name, setName] = useState("");
@@ -27,20 +29,34 @@ export default function Signup({ navigation }: { navigation: any }) {
         return updateProfile(user, { displayName: name });
       })
       .then(() => {
+        // Also save the user data to Firestore
+        const user = auth.currentUser;
+        if (user) {
+          const userRef = doc(db, 'users', user.uid);
+          return setDoc(userRef, {
+            displayName: user.displayName,
+            email: user.email,
+            createdAt: serverTimestamp(),
+            // Add other default fields as needed
+            totalSteps: 0,
+            totalCalories: 0,
+            totalDistance: 0,
+            totalActiveMinutes: 0
+          });
+        }
+      })
+      .then(() => {
         Alert.alert(
-          "Success", 
+          "Success",
           "Account created successfully! Let's set up your profile.",
           [
-            { 
-              text: "OK", 
-              onPress: () => navigation.navigate("user-bio-form") 
+            {
+              text: "OK",
+              onPress: () => navigation.navigate("user-bio-form")
             }
           ]
         );
       })
-      .catch((error) => {
-        Alert.alert("Error", error.message);
-      });
   };
 
   // The rest of the component remains the same...

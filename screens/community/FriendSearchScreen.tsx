@@ -16,15 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { auth } from '../../app/firebaseConfig';
-import communityService, { CommunityUser } from '../../services/communityService';
-
-interface FriendRequest {
-  id: string;
-  userId: string;
-  displayName: string;
-  status: 'pending' | 'accepted' | 'requested';
-  avatar?: string;
-}
+import communityService, { CommunityUser, FriendRequest } from '../../services/communityService';
 
 export default function FriendSearchScreen({ navigation }: { navigation: any }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,24 +40,10 @@ export default function FriendSearchScreen({ navigation }: { navigation: any }) 
       const friendsData = await communityService.getFriendsData();
       setFriends(friendsData);
       
-      // In a real app, you would implement a method to get friend requests
-      // For now, we'll generate mock data
-      const mockRequests: FriendRequest[] = [
-        {
-          id: 'request1',
-          userId: 'user1',
-          displayName: 'Sarah Johnson',
-          status: 'pending',
-        },
-        {
-          id: 'request2',
-          userId: 'user2',
-          displayName: 'Michael Chen',
-          status: 'pending',
-        }
-      ];
+      // Get actual friend requests from Firebase (replacing mock data)
+      const requestsData = await communityService.getFriendRequests();
+      setFriendRequests(requestsData);
       
-      setFriendRequests(mockRequests);
     } catch (error) {
       console.error('Error loading friends data:', error);
     } finally {
@@ -88,48 +66,9 @@ export default function FriendSearchScreen({ navigation }: { navigation: any }) 
     setSearchLoading(true);
     
     try {
-      // In a real app, you would implement a search method in communityService
-      // For now, we'll generate mock data
-      
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const mockResults: CommunityUser[] = [
-        {
-          id: 'search1',
-          displayName: 'John Smith',
-          totalSteps: 12500,
-          totalCalories: 2300,
-          totalDistance: 8.5,
-          totalActiveMinutes: 65,
-          tier: 'Gold',
-        },
-        {
-          id: 'search2',
-          displayName: 'Emma Wilson',
-          totalSteps: 9800,
-          totalCalories: 1900,
-          totalDistance: 6.2,
-          totalActiveMinutes: 48,
-          tier: 'Silver',
-        },
-        {
-          id: 'search3',
-          displayName: 'Alex Turner',
-          totalSteps: 15200,
-          totalCalories: 2700,
-          totalDistance: 10.1,
-          totalActiveMinutes: 78,
-          tier: 'Platinum',
-        }
-      ];
-      
-      // Filter results based on search query
-      const filtered = mockResults.filter(user => 
-        user.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      
-      setSearchResults(filtered);
+      // Use the real search method instead of mock data
+      const results = await communityService.searchUsers(searchQuery);
+      setSearchResults(results);
     } catch (error) {
       console.error('Error searching users:', error);
       Alert.alert('Error', 'Failed to search users');
