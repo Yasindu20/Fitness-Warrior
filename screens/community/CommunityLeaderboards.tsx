@@ -10,8 +10,8 @@ import {
     Dimensions,
     SafeAreaView,
     ActivityIndicator,
-    ScrollView,
-    RefreshControl
+    RefreshControl,
+    ScrollView  
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -65,29 +65,33 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
         }
     };
 
-
-
     // Location permission and retrieval
     useEffect(() => {
         (async () => {
-            let { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                console.log('Permission to access location was denied');
-                return;
-            }
+            try {
+                let { status } = await Location.requestForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                    console.log('Permission to access location was denied');
+                    return;
+                }
 
-            let currentLocation = await Location.getCurrentPositionAsync({});
-            setLocation(currentLocation);
+                let currentLocation = await Location.getCurrentPositionAsync({});
+                setLocation(currentLocation);
 
-            // Get location name
-            let geoCode = await Location.reverseGeocodeAsync({
-                latitude: currentLocation.coords.latitude,
-                longitude: currentLocation.coords.longitude,
-            });
+                // Get location name
+                if (currentLocation) {
+                    let geoCode = await Location.reverseGeocodeAsync({
+                        latitude: currentLocation.coords.latitude,
+                        longitude: currentLocation.coords.longitude,
+                    });
 
-            if (geoCode.length > 0) {
-                const { city, region } = geoCode[0];
-                setLocationName(city && region ? `${city}, ${region}` : 'Your Area');
+                    if (geoCode.length > 0) {
+                        const { city, region } = geoCode[0];
+                        setLocationName(city && region ? `${city}, ${region}` : 'Your Area');
+                    }
+                }
+            } catch (error) {
+                console.error("Error getting location:", error);
             }
         })();
     }, []);
@@ -108,8 +112,18 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
             // Fetch leaderboards
             fetchGlobalLeaderboards();
             fetchFriends();
-            fetchTeams();
-            fetchChallenges();
+            
+            try {
+                await fetchTeams();
+            } catch (error) {
+                console.error("Error in fetchTeams:", error);
+            }
+            
+            try {
+                await fetchChallenges();
+            } catch (error) {
+                console.error("Error in fetchChallenges:", error);
+            }
 
             // If location is available, fetch local leaderboards
             if (location) {
@@ -552,6 +566,14 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
                         ListEmptyComponent={
                             <Text style={styles.emptyText}>No data available</Text>
                         }
+                        refreshControl={
+                            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+                        }
+                        onScroll={Animated.event(
+                            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                            { useNativeDriver: false }
+                        )}
+                        scrollEventThrottle={16}
                     />
                 </View>
             </View>
@@ -598,6 +620,14 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
                             ListEmptyComponent={
                                 <Text style={styles.emptyText}>No nearby users found</Text>
                             }
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+                            }
+                            onScroll={Animated.event(
+                                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                                { useNativeDriver: false }
+                            )}
+                            scrollEventThrottle={16}
                         />
                     </View>
                 )}
@@ -611,16 +641,25 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
             <View style={styles.tabContent}>
                 {friends.length > 0 ? (
                     <View style={styles.leaderboardContainer}>
-                        <Text style={styles.leaderboardTitle}>Friends Leaderboard</Text>
                         <FlatList
                             data={friends}
                             keyExtractor={(item) => item.id}
                             renderItem={renderUserItem}
                             contentContainerStyle={styles.leaderboardList}
+                            ListHeaderComponent={<Text style={styles.leaderboardTitle}>Friends Leaderboard</Text>}
                             ListEmptyComponent={
                                 <Text style={styles.emptyText}>No friends added yet</Text>
                             }
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+                            }
+                            onScroll={Animated.event(
+                                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                                { useNativeDriver: false }
+                            )}
+                            scrollEventThrottle={16}
                         />
+                        
                         <TouchableOpacity
                             style={styles.addFriendsButton}
                             onPress={() => navigation.navigate('friend-search')}
@@ -654,11 +693,10 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
             <View style={styles.tabContent}>
                 {challenges.length > 0 ? (
                     <View style={styles.challengesContainer}>
-                        <Text style={styles.leaderboardTitle}>Your Active Challenges</Text>
-
                         <FlatList
                             data={challenges.filter(c => c.status === 'active')}
                             keyExtractor={(item) => item.id}
+                            ListHeaderComponent={<Text style={styles.leaderboardTitle}>Your Active Challenges</Text>}
                             renderItem={({ item }) => (
                                 <TouchableOpacity
                                     style={styles.challengeItem}
@@ -693,6 +731,14 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
                             ListEmptyComponent={
                                 <Text style={styles.emptyText}>No active challenges</Text>
                             }
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+                            }
+                            onScroll={Animated.event(
+                                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                                { useNativeDriver: false }
+                            )}
+                            scrollEventThrottle={16}
                         />
 
                         <TouchableOpacity
@@ -727,11 +773,10 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
             <View style={styles.tabContent}>
                 {teams.length > 0 ? (
                     <View style={styles.teamsContainer}>
-                        <Text style={styles.leaderboardTitle}>Your Teams</Text>
-
                         <FlatList
                             data={teams}
                             keyExtractor={(item) => item.id}
+                            ListHeaderComponent={<Text style={styles.leaderboardTitle}>Your Teams</Text>}
                             renderItem={({ item }) => (
                                 <TouchableOpacity
                                     style={[styles.teamItem, { borderLeftColor: item.color }]}
@@ -763,6 +808,14 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
                             ListEmptyComponent={
                                 <Text style={styles.emptyText}>No teams found</Text>
                             }
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+                            }
+                            onScroll={Animated.event(
+                                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                                { useNativeDriver: false }
+                            )}
+                            scrollEventThrottle={16}
                         />
 
                         <View style={styles.teamButtons}>
@@ -956,17 +1009,7 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
             </View>
 
             {/* Content based on active tab */}
-            <ScrollView
-                style={styles.container}
-                onScroll={Animated.event(
-                    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-                    { useNativeDriver: false }
-                )}
-                scrollEventThrottle={16}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-                }
-            >
+            <View style={styles.container}>
                 {loading && !refreshing ? (
                     <View style={styles.loadingContainer}>
                         <ActivityIndicator size="large" color="#6200ee" />
@@ -981,7 +1024,7 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
                         {activeTab === 'teams' && renderTeamsTab()}
                     </>
                 )}
-            </ScrollView>
+            </View>
 
             {/* Activity Feed Button */}
             <TouchableOpacity
