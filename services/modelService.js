@@ -320,8 +320,8 @@ class ModelService {
         }
 
         try {
-            // Make sure windowData is properly shaped
-            // First, ensure it's an array with shape [50, 6]
+            
+            // Ensure it's an array with shape [50, 6]
             if (!Array.isArray(windowData) || windowData.length !== 50) {
                 console.warn('Input data must have 50 time steps, got', windowData.length);
                 return false;
@@ -352,8 +352,6 @@ class ModelService {
 
             // Create tensor with explicit shape to ensure it's 3D
             const inputTensor = tf.tensor3d([windowData], [1, 50, 6]);
-
-            // Run prediction
             const prediction = this.model.predict(inputTensor);
             const predictionValue = prediction.dataSync()[0];
 
@@ -380,10 +378,6 @@ class ModelService {
                 }
             }
 
-            // MODIFIED: Balanced step detection criteria that works with your device
-            // 1. Either prediction value above threshold with enough consecutive highs
-            // 2. OR peak detection when prediction is close to threshold
-            // 3. Must be past the refractory period
             const hasEnoughConsecutiveHighs = this.consecutiveHighPredictions >= 1; // Only need 1 consecutive reading
 
             let stepDetected = false;

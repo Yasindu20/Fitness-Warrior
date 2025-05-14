@@ -133,17 +133,17 @@ class FoodSearchService {
       const vectorizer = require('../assets/ml/vectorizer.json');
       const vectors = require('../assets/ml/food_vectors.json');
       const database = require('../assets/ml/food_database.json');
-      
+
       // Process the data directly
       this.vectorizer = this.createVectorizerFromData(vectorizer);
       this.foodVectors = this.createVectorsFromData(vectors);
       this.foodDatabase = database;
-      
+
       // Save processed data to cache for future use
       await this.saveToCache('vectorizer', this.vectorizer);
       await this.saveToCache('vectors', this.foodVectors);
       await this.saveToCache('database', this.foodDatabase);
-      
+
       this.log('Models loaded and processed successfully');
     } catch (error) {
       throw new Error(`Failed to load and cache models: ${(error as Error).message}`);
@@ -152,31 +152,31 @@ class FoodSearchService {
 
   private async loadSingleModel(key: string, assetModule: any): Promise<void> {
     this.log(`Loading ${key} from asset module`);
-    
+
     // Create asset object from the module
     const asset = Asset.fromModule(assetModule);
-    
+
     // Download the asset
     await asset.downloadAsync();
-    
+
     if (!asset.localUri) {
       throw new Error(`Failed to get local URI for ${key}`);
     }
-    
+
     const destination = `${this.cacheDir}${key}.json`;
-    
+
     // Copy to our cache location
     await FileSystem.copyAsync({
       from: asset.localUri,
       to: destination
     });
-    
+
     this.log(`Cached ${key} to:`, destination);
-    
+
     // Read the file from cache
     const fileContent = await FileSystem.readAsStringAsync(destination);
     const data = JSON.parse(fileContent);
-    
+
     // Process the data based on model type
     this.initializeModel(key, data);
   }
@@ -203,16 +203,16 @@ class FoodSearchService {
       const vocabulary = data.vocabulary || {};
       const idf = data.idf || [];
       const maxFeatures = data.maxFeatures || idf.length;
-      
+
       return {
         transform: (input: string[]): number[][] => {
           return input.map(text => {
             // Initialize zero vector with maxFeatures length
             const vector = new Array(maxFeatures).fill(0);
-  
+
             // Tokenize input text
             const tokens = this.tokenizeText(text);
-  
+
             // Calculate TF (Term Frequency)
             const tf: { [key: string]: number } = {};
             tokens.forEach(token => {
@@ -221,7 +221,7 @@ class FoodSearchService {
                 tf[token] = (tf[token] || 0) + 1;
               }
             });
-  
+
             // Calculate TF-IDF
             Object.entries(tf).forEach(([token, frequency]) => {
               const index = vocabulary[token];
@@ -230,7 +230,7 @@ class FoodSearchService {
                 vector[index] = frequency * idf[index];
               }
             });
-  
+
             return vector;
           });
         },
@@ -278,41 +278,41 @@ class FoodSearchService {
       if (!query || typeof query !== 'string') {
         throw new Error('Invalid search query');
       }
-  
+
       // Add detailed logging
       console.log('Searching for:', query);
-  
+
       if (!this.isInitialized) {
         console.log('Service not initialized, initializing...');
         await this.initialize();
       }
-  
+
       console.log('Service initialized, processing query...');
       const processedQuery = this.preprocessQuery(query);
-  
+
       // For short queries, use prefix matching instead of vector similarity
       if (processedQuery.length < 3 && this.foodDatabase) {
         console.log('Using prefix matching for short query:', processedQuery);
         return this.prefixSearch(processedQuery, limit);
       }
-  
+
       if (!this.vectorizer) {
         console.log('Vectorizer not initialized, falling back to prefix search');
         return this.prefixSearch(processedQuery, limit);
       }
-  
+
       try {
         const queryVector = this.vectorizer.transform([processedQuery]);
-        
+
         if (!this.foodVectors) {
           console.log('Food vectors not initialized, falling back to prefix search');
           return this.prefixSearch(processedQuery, limit);
         }
-  
+
         // Use a hybrid approach - combine vector similarity with prefix matching
         const vectorResults = this.calculateCosineSimilarity(queryVector, this.foodVectors);
         const prefixResults = this.prefixSearch(processedQuery, limit);
-        
+
         // Combine results, giving priority to prefix matches
         return this.combineSearchResults(vectorResults, prefixResults, limit);
       } catch (error) {
@@ -327,9 +327,9 @@ class FoodSearchService {
 
   private prefixSearch(query: string, limit: number): FoodItem[] {
     if (!this.foodDatabase) return [];
-    
+
     const lowerQuery = query.toLowerCase();
-    
+
     // Find all foods that start with the query prefix
     const prefixMatches = this.foodDatabase
       .filter(food => food.name.toLowerCase().startsWith(lowerQuery))
@@ -339,12 +339,12 @@ class FoodSearchService {
       }))
       .sort((a, b) => (b.similarity || 0) - (a.similarity || 0))
       .slice(0, limit);
-    
+
     // If we didn't find enough matches, look for food items containing the query
     if (prefixMatches.length < limit && lowerQuery.length > 1) {
       const containsMatches = this.foodDatabase
-        .filter(food => 
-          !food.name.toLowerCase().startsWith(lowerQuery) && 
+        .filter(food =>
+          !food.name.toLowerCase().startsWith(lowerQuery) &&
           food.name.toLowerCase().includes(lowerQuery)
         )
         .map(food => ({
@@ -353,10 +353,10 @@ class FoodSearchService {
         }))
         .sort((a, b) => (b.similarity || 0) - (a.similarity || 0))
         .slice(0, limit - prefixMatches.length);
-      
+
       return [...prefixMatches, ...containsMatches];
     }
-    
+
     return prefixMatches;
   }
 
@@ -376,19 +376,19 @@ class FoodSearchService {
 
     // Map of food item IDs to avoid duplicates
     const resultMap = new Map<string, FoodItem>();
-    
+
     // Add prefix matches first (they get priority)
     prefixResults.forEach(item => {
       resultMap.set(item.id, item);
     });
-    
+
     // Add vector matches if not already in results
     vectorResults.forEach(item => {
       if (!resultMap.has(item.id)) {
         resultMap.set(item.id, item);
       }
     });
-    
+
     // Convert map back to array and sort by similarity
     return Array.from(resultMap.values())
       .sort((a, b) => (b.similarity || 0) - (a.similarity || 0))
@@ -463,7 +463,7 @@ class FoodSearchService {
   private async saveToCache(key: string, data: any): Promise<void> {
     try {
       const cachePath = `${this.cacheDir}${key}_processed.json`;
-      
+
       // For vectorizer, only save the data needed to recreate it
       let dataToSave = data;
       if (key === 'vectorizer' && this.vectorizer) {
@@ -474,7 +474,7 @@ class FoodSearchService {
           maxFeatures: data.maxFeatures
         };
       }
-      
+
       await FileSystem.writeAsStringAsync(
         cachePath,
         JSON.stringify(dataToSave),
@@ -491,18 +491,18 @@ class FoodSearchService {
     try {
       const cachePath = `${this.cacheDir}${key}_processed.json`;
       const fileInfo = await FileSystem.getInfoAsync(cachePath);
-  
+
       if (fileInfo.exists) {
         const data = await FileSystem.readAsStringAsync(cachePath);
         const parsedData = JSON.parse(data);
-        
+
         // Reconstruct objects with their methods
         if (key === 'vectorizer' && parsedData) {
           return this.createVectorizerFromData(parsedData);
         } else if (key === 'vectors' && parsedData) {
           return this.createVectorsFromData(parsedData);
         }
-        
+
         return parsedData;
       }
       return null;

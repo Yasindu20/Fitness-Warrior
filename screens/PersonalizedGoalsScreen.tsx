@@ -8,7 +8,10 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
-  Alert
+  Alert,
+  Dimensions,
+  Animated,
+  Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -21,6 +24,12 @@ import WorkoutProgramService from '../services/WorkoutProgramService';
 import WeatherService from '../services/WeatherService';
 import { auth } from '../app/firebaseConfig';
 import { formatDate } from '../utils/dateUtils';
+
+// Get screen dimensions for responsive design
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Determine if the device is a tablet
+const isTablet = SCREEN_WIDTH > 600;
 
 const GoalTimeFrameLabels = {
   [GoalTimeFrame.DAILY]: 'Today',
@@ -37,6 +46,8 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('goals'); // 'goals', 'recommendations', 'achievements', 'programs'
   const [weather, setWeather] = useState<any>(null);
+  const [tabIndicatorPosition] = useState(new Animated.Value(0));
+  const [tabIndicatorWidth] = useState(new Animated.Value(0));
   
   // Check if we should navigate to a specific tab from route params
   useEffect(() => {
@@ -44,6 +55,47 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
       setActiveTab(route.params.tab);
     }
   }, [route.params]);
+  
+  // Animate tab indicator when tab changes
+  useEffect(() => {
+    let position = 0;
+    let width = SCREEN_WIDTH * 0.25; // Default width for 4 tabs
+    
+    // Calculate position based on active tab
+    switch (activeTab) {
+      case 'goals':
+        position = 0;
+        width = isTablet ? 100 : SCREEN_WIDTH * 0.25;
+        break;
+      case 'recommendations':
+        position = isTablet ? 100 : SCREEN_WIDTH * 0.25;
+        width = isTablet ? 180 : SCREEN_WIDTH * 0.25;
+        break;
+      case 'programs':
+        position = isTablet ? 280 : SCREEN_WIDTH * 0.5;
+        width = isTablet ? 120 : SCREEN_WIDTH * 0.25;
+        break;
+      case 'achievements':
+        position = isTablet ? 400 : SCREEN_WIDTH * 0.75;
+        width = isTablet ? 140 : SCREEN_WIDTH * 0.25;
+        break;
+    }
+    
+    // Animate the indicator
+    Animated.parallel([
+      Animated.timing(tabIndicatorPosition, {
+        toValue: position,
+        duration: 250,
+        useNativeDriver: false
+      }),
+      Animated.timing(tabIndicatorWidth, {
+        toValue: width,
+        duration: 250,
+        useNativeDriver: false
+      })
+    ]).start();
+    
+  }, [activeTab, SCREEN_WIDTH]);
   
   // Load data when screen is focused
   useFocusEffect(
@@ -90,7 +142,7 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
       const achievs = await GoalsTrackingService.getAchievements();
       setAchievements(achievs);
       
-      // Get workout programs - NEW!
+      // Get workout programs
       console.log('Loading workout programs...');
       const programs = await WorkoutProgramService.getUserPrograms();
       console.log('Workout programs loaded:', programs.length);
@@ -214,11 +266,10 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
     );
   };
   
-  // Render goal progress bar
+  // Render goal progress bar with animation
   const renderGoalProgress = (goal: FitnessGoal) => {
     const progress = Math.min(goal.current / goal.target, 1);
-    let color1 = '#6200ee';
-    let color2 = '#9546f8';
+    let color1, color2;
     
     // Different colors based on goal type
     switch (goal.type) {
@@ -238,6 +289,9 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
         color1 = '#2196F3';
         color2 = '#03A9F4';
         break;
+      default:
+        color1 = '#6200ee';
+        color2 = '#9546f8';
     }
     
     return (
@@ -253,13 +307,16 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
             ]}
           />
         </View>
-        <Text style={styles.progressText}>
-          {goal.current.toLocaleString()} / {goal.target.toLocaleString()}
-          {goal.streak && goal.streak > 1 ? 
-            <Text style={styles.streakText}> 🔥 {goal.streak} day streak!</Text> : 
-            null
-          }
-        </Text>
+        <View style={styles.progressTextContainer}>
+          <Text style={styles.progressText}>
+            {goal.current.toLocaleString()} / {goal.target.toLocaleString()}
+          </Text>
+          {goal.streak && goal.streak > 1 ? (
+            <Text style={styles.streakText}>
+              <Ionicons name="flame" size={16} color="#FF9800" /> {goal.streak} day streak
+            </Text>
+          ) : null}
+        </View>
       </View>
     );
   };
@@ -305,23 +362,28 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
     // Determine icon based on recommendation type
     let icon = 'bulb-outline';
     let iconColor = '#6200ee';
+    let gradientColors: readonly [string, string] = ['#f0e6ff', '#e6d2ff'];
     
     switch (recommendation.type) {
       case 'exercise':
         icon = 'fitness-outline';
         iconColor = '#4CAF50';
+        gradientColors = ['#e8f5e9', '#c8e6c9'] as const;
         break;
       case 'nutrition':
         icon = 'restaurant-outline';
         iconColor = '#FF9800';
+        gradientColors = ['#fff3e0', '#ffe0b2'] as const;
         break;
       case 'recovery':
         icon = 'bed-outline';
         iconColor = '#2196F3';
+        gradientColors = ['#e3f2fd', '#bbdefb'] as const;
         break;
       case 'general':
         icon = 'bulb-outline';
         iconColor = '#6200ee';
+        gradientColors = ['#f0e6ff', '#e6d2ff'] as const;
         break;
     }
     
@@ -344,7 +406,13 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
     }
     
     return (
-      <View key={recommendation.id} style={styles.recommendationCard}>
+      <LinearGradient
+        key={recommendation.id}
+        colors={gradientColors}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.recommendationCard}
+      >
         <View style={styles.recommendationHeader}>
           <View style={[styles.recommendationIconContainer, { backgroundColor: `${iconColor}20` }]}>
             <Ionicons name={icon as any} size={24} color={iconColor} />
@@ -370,7 +438,7 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
         >
           <Text style={styles.completeButtonText}>Mark as Done</Text>
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
     );
   };
   
@@ -386,7 +454,10 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
           !isUnlocked && styles.lockedAchievement
         ]}
       >
-        <View style={styles.achievementIconContainer}>
+        <View style={[
+          styles.achievementIconContainer,
+          isUnlocked && styles.unlockedAchievementIcon
+        ]}>
           {isUnlocked ? (
             <Ionicons name="trophy" size={32} color="#FFD700" />
           ) : (
@@ -423,7 +494,7 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
           )}
           {isUnlocked && (
             <Text style={styles.achievementDate}>
-              Unlocked on {new Date(achievement.unlockedAt).toLocaleDateString()}
+              <Ionicons name="calendar" size={12} color="#999" /> Unlocked on {new Date(achievement.unlockedAt).toLocaleDateString()}
             </Text>
           )}
         </View>
@@ -437,7 +508,10 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
     const completionPercentage = WorkoutProgramService.getCompletionPercentage(program);
     
     return (
-      <View key={program.id} style={styles.programCard}>
+      <View key={program.id} style={[
+        styles.programCard,
+        isActive && styles.activeProgramCard
+      ]}>
         <View style={styles.programHeader}>
           <View style={[
             styles.programIconContainer, 
@@ -446,7 +520,10 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
             <Ionicons name="barbell-outline" size={24} color={isActive ? "#fff" : "#6200ee"} />
           </View>
           <View style={styles.programTitleContainer}>
-            <Text style={styles.programTitle}>{program.title}</Text>
+            <Text style={[
+              styles.programTitle,
+              isActive && { color: '#6200ee' }
+            ]}>{program.title}</Text>
             <Text style={styles.programSubtitle}>
               {program.level.charAt(0).toUpperCase() + program.level.slice(1)} • {program.focusArea}
             </Text>
@@ -461,7 +538,10 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
         {/* Progress bar */}
         <View style={styles.programProgressContainer}>
           <View style={styles.programProgressBackground}>
-            <View 
+            <LinearGradient 
+              colors={isActive ? (['#4CAF50', '#8BC34A'] as const) : (['#9E9E9E', '#BDBDBD'] as const)}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
               style={[
                 styles.programProgressFill,
                 { width: `${completionPercentage}%` }
@@ -479,6 +559,7 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
             style={styles.programButton}
             onPress={() => viewWorkoutDetails(program)}
           >
+            <Ionicons name="eye-outline" size={16} color="#6200ee" style={{ marginRight: 4 }} />
             <Text style={styles.programButtonText}>View</Text>
           </TouchableOpacity>
           
@@ -487,6 +568,7 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
               style={[styles.programButton, styles.activateButton]}
               onPress={() => activateProgram(program.id)}
             >
+              <Ionicons name="play-outline" size={16} color="#4CAF50" style={{ marginRight: 4 }} />
               <Text style={styles.activateButtonText}>Activate</Text>
             </TouchableOpacity>
           )}
@@ -550,44 +632,100 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
   
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header with gradient */}
+      <LinearGradient
+        colors={['#7B1FA2', '#6200ee'] as const}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <Text style={styles.title}>Personalized Goals</Text>
         {renderWeatherInfo()}
-      </View>
+      </LinearGradient>
       
       {/* Tab Navigation */}
       <View style={styles.tabContainer}>
+        {/* Animated Tab Indicator */}
+        <Animated.View 
+          style={[
+            styles.tabIndicator,
+            {
+              left: tabIndicatorPosition,
+              width: tabIndicatorWidth
+            }
+          ]}
+        />
+        
+        {/* Tab Buttons */}
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'goals' && styles.activeTab]}
+          style={styles.tab}
           onPress={() => setActiveTab('goals')}
         >
-          <Text style={[styles.tabText, activeTab === 'goals' && styles.activeTabText]}>
+          <Ionicons 
+            name="trophy-outline" 
+            size={20} 
+            color={activeTab === 'goals' ? '#6200ee' : '#999'} 
+            style={styles.tabIcon}
+          />
+          <Text style={[
+            styles.tabText, 
+            activeTab === 'goals' && styles.activeTabText
+          ]}>
             Goals
           </Text>
         </TouchableOpacity>
+        
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'recommendations' && styles.activeTab]}
+          style={styles.tab}
           onPress={() => setActiveTab('recommendations')}
         >
-          <Text style={[styles.tabText, activeTab === 'recommendations' && styles.activeTabText]}>
-            Recommendations
+          <Ionicons 
+            name="bulb-outline" 
+            size={20} 
+            color={activeTab === 'recommendations' ? '#6200ee' : '#999'} 
+            style={styles.tabIcon}
+          />
+          <Text style={[
+            styles.tabText, 
+            activeTab === 'recommendations' && styles.activeTabText
+          ]}>
+            Recs
           </Text>
         </TouchableOpacity>
+        
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'programs' && styles.activeTab]}
+          style={styles.tab}
           onPress={() => setActiveTab('programs')}
         >
-          <Text style={[styles.tabText, activeTab === 'programs' && styles.activeTabText]}>
+          <Ionicons 
+            name="barbell-outline" 
+            size={20} 
+            color={activeTab === 'programs' ? '#6200ee' : '#999'} 
+            style={styles.tabIcon}
+          />
+          <Text style={[
+            styles.tabText, 
+            activeTab === 'programs' && styles.activeTabText
+          ]}>
             Programs
           </Text>
         </TouchableOpacity>
+        
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'achievements' && styles.activeTab]}
+          style={styles.tab}
           onPress={() => setActiveTab('achievements')}
         >
-          <Text style={[styles.tabText, activeTab === 'achievements' && styles.activeTabText]}>
-            Achievements
+          <Ionicons 
+            name="ribbon-outline" 
+            size={20} 
+            color={activeTab === 'achievements' ? '#6200ee' : '#999'} 
+            style={styles.tabIcon}
+          />
+          <Text style={[
+            styles.tabText, 
+            activeTab === 'achievements' && styles.activeTabText
+          ]}>
+            Achieve
           </Text>
         </TouchableOpacity>
       </View>
@@ -595,13 +733,18 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
       {/* Content */}
       <ScrollView
         style={styles.content}
+        contentContainerStyle={styles.contentContainer}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            colors={['#6200ee']} 
+          />
         }
       >
         {/* Goals Tab */}
         {activeTab === 'goals' && (
-          <View>
+          <View style={styles.tabContent}>
             {/* Daily Goals */}
             <Text style={styles.sectionTitle}>Daily Goals</Text>
             {activeGoals.filter(goal => goal.timeFrame === GoalTimeFrame.DAILY).length > 0 ? (
@@ -643,21 +786,29 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
               style={styles.generateButton}
               onPress={generateNewGoals}
             >
-              <Text style={styles.generateButtonText}>Generate New Goals</Text>
+              <LinearGradient
+                colors={['#7B1FA2', '#6200ee'] as const}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.generateButtonGradient}
+              >
+                <Ionicons name="refresh" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.generateButtonText}>Generate New Goals</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         )}
         
         {/* Recommendations Tab */}
         {activeTab === 'recommendations' && (
-          <View>
+          <View style={styles.tabContent}>
             {recommendations.length > 0 ? (
               <>
                 <Text style={styles.sectionTitle}>Personalized Recommendations</Text>
                 {recommendations.map(renderRecommendationCard)}
               </>
             ) : (
-              <View style={styles.emptyState}>
+              <View style={styles.emptyStateCenter}>
                 <Ionicons name="bulb-outline" size={48} color="#ccc" />
                 <Text style={styles.emptyStateTitle}>No Recommendations</Text>
                 <Text style={styles.emptyStateText}>
@@ -670,23 +821,31 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
                     await loadData();
                   }}
                 >
-                  <Text style={styles.generateRecsButtonText}>Generate Recommendations</Text>
+                  <LinearGradient
+                    colors={['#7B1FA2', '#6200ee'] as const}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.generateButtonGradient}
+                  >
+                    <Ionicons name="bulb" size={20} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.generateRecsButtonText}>Generate Recommendations</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
             )}
           </View>
         )}
         
-        {/* Programs Tab - NEW! */}
+        {/* Programs Tab */}
         {activeTab === 'programs' && (
-          <View>
+          <View style={styles.tabContent}>
             {workoutPrograms.length > 0 ? (
               <>
                 <Text style={styles.sectionTitle}>Your Workout Programs</Text>
                 {workoutPrograms.map(renderWorkoutProgramCard)}
               </>
             ) : (
-              <View style={styles.emptyState}>
+              <View style={styles.emptyStateCenter}>
                 <Ionicons name="barbell-outline" size={48} color="#ccc" />
                 <Text style={styles.emptyStateTitle}>No Workout Programs</Text>
                 <Text style={styles.emptyStateText}>
@@ -696,7 +855,15 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
                   style={styles.goToCoachButton}
                   onPress={() => navigation.navigate('coach')}
                 >
-                  <Text style={styles.goToCoachButtonText}>Go to AI Coach</Text>
+                  <LinearGradient
+                    colors={['#7B1FA2', '#6200ee'] as const}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.generateButtonGradient}
+                  >
+                    <Ionicons name="fitness" size={20} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.goToCoachButtonText}>Go to AI Coach</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
             )}
@@ -705,7 +872,7 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
         
         {/* Achievements Tab */}
         {activeTab === 'achievements' && (
-          <View>
+          <View style={styles.tabContent}>
             {achievements.length > 0 ? (
               <>
                 <Text style={styles.sectionTitle}>Your Achievements</Text>
@@ -719,7 +886,7 @@ export default function PersonalizedGoalsScreen({ navigation, route }: { navigat
                   .map(renderAchievementCard)}
               </>
             ) : (
-              <View style={styles.emptyState}>
+              <View style={styles.emptyStateCenter}>
                 <Ionicons name="trophy-outline" size={48} color="#ccc" />
                 <Text style={styles.emptyStateTitle}>No Achievements Yet</Text>
                 <Text style={styles.emptyStateText}>
@@ -743,23 +910,32 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f9f9f9',
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 16,
     fontSize: 16,
     color: '#6200ee',
+    fontWeight: '500',
   },
   header: {
-    backgroundColor: '#6200ee',
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 50 : 40,
     paddingBottom: 20,
     paddingHorizontal: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 8,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 8,
+    letterSpacing: 0.5,
   },
   weatherContainer: {
     flexDirection: 'row',
@@ -775,11 +951,13 @@ const styles = StyleSheet.create({
     color: '#a5d6a7',
     marginLeft: 8,
     fontSize: 14,
+    fontWeight: '500',
   },
   weatherBadText: {
     color: '#ef9a9a',
     marginLeft: 8,
     fontSize: 14,
+    fontWeight: '500',
   },
   tabContainer: {
     flexDirection: 'row',
@@ -789,19 +967,33 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 1.5,
+    position: 'relative',
+    paddingVertical: 8,
+    marginHorizontal: 12,
+    marginTop: -20,
+    borderRadius: 10,
   },
   tab: {
     flex: 1,
-    paddingVertical: 15,
+    paddingVertical: 8,
     alignItems: 'center',
+    flexDirection: 'column',
+    justifyContent: 'center',
   },
-  activeTab: {
-    borderBottomWidth: 3,
-    borderBottomColor: '#6200ee',
+  tabIcon: {
+    marginBottom: 4,
+  },
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    height: 3,
+    backgroundColor: '#6200ee',
+    borderRadius: 3,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
+    textAlign: 'center',
   },
   activeTabText: {
     color: '#6200ee',
@@ -809,6 +1001,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 30,
+  },
+  tabContent: {
     padding: 16,
   },
   sectionTitle: {
@@ -817,33 +1014,35 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 12,
     color: '#333',
+    paddingHorizontal: 4,
   },
   goalCard: {
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
-    elevation: 2,
+    marginBottom: 16,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   goalHeader: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   goalIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#f0e6ff',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   goalTitleContainer: {
     flex: 1,
+    justifyContent: 'center',
   },
   goalTitle: {
     fontSize: 16,
@@ -859,50 +1058,54 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   progressBackground: {
-    height: 10,
+    height: 12,
     backgroundColor: '#f0f0f0',
-    borderRadius: 5,
+    borderRadius: 6,
     overflow: 'hidden',
   },
   progressFill: {
-    height: 10,
-    borderRadius: 5,
+    height: 12,
+    borderRadius: 6,
+  },
+  progressTextContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
   },
   progressText: {
     fontSize: 14,
     color: '#666',
-    marginTop: 4,
-    textAlign: 'right',
   },
   streakText: {
     color: '#ff9800',
     fontWeight: 'bold',
+    fontSize: 14,
   },
   recommendationCard: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
-    elevation: 2,
+    marginBottom: 16,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   recommendationHeader: {
     flexDirection: 'row',
     marginBottom: 12,
   },
   recommendationIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   recommendationTitleContainer: {
     flex: 1,
+    justifyContent: 'center',
   },
   recommendationTitle: {
     fontSize: 16,
@@ -920,14 +1123,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     marginBottom: 16,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   completeButton: {
     backgroundColor: '#6200ee',
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 5,
+    borderRadius: 8,
     alignSelf: 'flex-end',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.5,
   },
   completeButtonText: {
     color: '#fff',
@@ -936,27 +1144,30 @@ const styles = StyleSheet.create({
   },
   achievementCard: {
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
-    elevation: 2,
+    marginBottom: 16,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     flexDirection: 'row',
   },
   lockedAchievement: {
     backgroundColor: '#f5f5f5',
   },
   achievementIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#f9f9f9',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
+  },
+  unlockedAchievementIcon: {
+    backgroundColor: '#fff9c4',
   },
   achievementContent: {
     flex: 1,
@@ -965,17 +1176,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   achievementDescription: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 20,
   },
   achievementDate: {
     fontSize: 12,
     color: '#999',
-    marginTop: 4,
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   lockedText: {
     color: '#999',
@@ -997,33 +1211,38 @@ const styles = StyleSheet.create({
   achievementProgressText: {
     fontSize: 12,
     color: '#999',
-    marginTop: 2,
+    marginTop: 4,
     textAlign: 'right',
   },
-  // New styles for programs tab
+  // Improved styles for programs tab
   programCard: {
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
-    elevation: 2,
+    marginBottom: 16,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    borderLeftWidth: 0,
+  },
+  activeProgramCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#6200ee',
   },
   programHeader: {
     flexDirection: 'row',
     marginBottom: 12,
   },
   programIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#f0e6ff',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   activeProgramIcon: {
     backgroundColor: '#6200ee',
@@ -1043,12 +1262,12 @@ const styles = StyleSheet.create({
   },
   activeBadge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: -6,
+    right: -6,
     backgroundColor: '#4CAF50',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
   },
   activeBadgeText: {
     color: '#fff',
@@ -1056,7 +1275,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   programProgressContainer: {
-    marginVertical: 8,
+    marginVertical: 12,
   },
   programProgressBackground: {
     height: 8,
@@ -1066,13 +1285,12 @@ const styles = StyleSheet.create({
   },
   programProgressFill: {
     height: 8,
-    backgroundColor: '#4CAF50',
     borderRadius: 4,
   },
   programProgressText: {
     fontSize: 12,
     color: '#666',
-    marginTop: 4,
+    marginTop: 6,
     textAlign: 'right',
   },
   programActions: {
@@ -1081,15 +1299,24 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   programButton: {
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 4,
-    marginLeft: 8,
+    borderRadius: 8,
+    marginLeft: 12,
     backgroundColor: '#f5f5f5',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
   },
   programButtonText: {
-    color: '#666',
+    color: '#6200ee',
     fontSize: 14,
+    fontWeight: '500',
   },
   activateButton: {
     backgroundColor: '#e8f5e9',
@@ -1102,34 +1329,60 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffebee',
   },
   emptyState: {
-    padding: 20,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 16,
     marginBottom: 20,
   },
+  emptyStateCenter: {
+    padding: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginTop: 20,
+    marginBottom: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
   emptyStateTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#666',
-    marginTop: 12,
+    marginTop: 16,
     marginBottom: 8,
   },
   emptyStateText: {
     fontSize: 14,
     color: '#999',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
+    maxWidth: '90%',
   },
   generateButton: {
-    backgroundColor: '#6200ee',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
     marginTop: 20,
     marginBottom: 40,
     alignSelf: 'center',
+    elevation: 4,
+    shadowColor: '#6200ee',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  generateButtonGradient: {
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   generateButtonText: {
     color: '#fff',
@@ -1137,11 +1390,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   generateRecsButton: {
-    backgroundColor: '#6200ee',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
     marginTop: 16,
+    elevation: 4,
+    shadowColor: '#6200ee',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
   generateRecsButtonText: {
     color: '#fff',
@@ -1149,11 +1405,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   goToCoachButton: {
-    backgroundColor: '#6200ee',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
     marginTop: 16,
+    elevation: 4,
+    shadowColor: '#6200ee',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
   goToCoachButtonText: {
     color: '#fff',
