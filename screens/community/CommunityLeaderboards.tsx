@@ -11,7 +11,7 @@ import {
     SafeAreaView,
     ActivityIndicator,
     RefreshControl,
-    ScrollView  
+    ScrollView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -112,13 +112,13 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
             // Fetch leaderboards
             fetchGlobalLeaderboards();
             fetchFriends();
-            
+
             try {
                 await fetchTeams();
             } catch (error) {
                 console.error("Error in fetchTeams:", error);
             }
-            
+
             try {
                 await fetchChallenges();
             } catch (error) {
@@ -250,22 +250,27 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
 
     // Helper function to capitalize first letter
     const capitalizeFirstLetter = (string: string) => {
+        if (!string) return '';
         return string.charAt(0).toUpperCase() + string.slice(1);
     };
 
-    // Get metric label
-    const getMetricLabel = (item: CommunityUser) => {
+    // Get metric value as a formatted string
+    const getMetricValueString = (item: CommunityUser) => {
+        if (!item) {
+            return 'N/A';
+        }
+
         switch (selectedMetric) {
             case 'steps':
-                return `${item.totalSteps.toLocaleString()} steps`;
+                return `${(item.totalSteps || 0).toLocaleString()} steps`;
             case 'calories':
-                return `${item.totalCalories.toLocaleString()} kcal`;
+                return `${(item.totalCalories || 0).toLocaleString()} kcal`;
             case 'distance':
-                return `${item.totalDistance.toLocaleString()} m`;
+                return `${(item.totalDistance || 0).toLocaleString()} m`;
             case 'minutes':
-                return `${item.totalActiveMinutes.toLocaleString()} mins`;
+                return `${(item.totalActiveMinutes || 0).toLocaleString()} mins`;
             default:
-                return '';
+                return 'N/A';
         }
     };
 
@@ -313,11 +318,31 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
         }
     };
 
-    // Render a user item in the leaderboard
+    // Render a user item in the leaderboard - ADDITIONAL FIXES HERE
     const renderUserItem = ({ item, index }: { item: CommunityUser; index: number }) => {
+        // CRITICAL: Must handle null/undefined items or properties
+        if (!item) {
+            return (
+                <View style={styles.userItem}>
+                    <Text>Invalid item</Text>
+                </View>
+            );
+        }
+
+        // Pre-compute all values at the top of the function
         const isCurrentUser = item.id === auth.currentUser?.uid;
         const rank = index + 1;
+        const displayName = item.displayName || 'Unknown';
+        const avatarLetter = displayName[0]?.toUpperCase() || '?';
+        const tier = item.tier || '';
+        
+        const locationCity = item.location?.city || '';
+        const hasLocation = !!locationCity; // Using double negation to convert to boolean
+        const hasStreak = !!item.streak && item.streak >= 3;
+        const streakValue = item.streak || 0;
+        const metricText = getMetricValueString(item);
 
+        // Now build the JSX with pre-computed values
         return (
             <TouchableOpacity
                 style={[
@@ -337,24 +362,24 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
                             <Image source={{ uri: item.avatar }} style={styles.avatar} />
                         ) : (
                             <View style={[styles.defaultAvatar, { backgroundColor: isCurrentUser ? '#6200ee' : '#e0e0e0' }]}>
-                                <Text style={styles.avatarText}>{item.displayName[0]?.toUpperCase() || '?'}</Text>
+                                <Text style={styles.avatarText}>{avatarLetter}</Text>
                             </View>
                         )}
-                        {item.streak && item.streak >= 3 && (
+                        {hasStreak && (
                             <View style={styles.streakBadge}>
-                                <Text style={styles.streakText}>🔥 {item.streak}</Text>
+                                <Text style={styles.streakText}>🔥 {streakValue}</Text>
                             </View>
                         )}
                     </View>
 
                     <View style={styles.userInfo}>
                         <Text style={[styles.userName, isCurrentUser && styles.currentUserText]}>
-                            {item.displayName} {isCurrentUser && '(You)'}
+                            {displayName} {isCurrentUser ? '(You)' : ''}
                         </Text>
                         <View style={styles.userMetaContainer}>
-                            <Text style={styles.userTier}>{item.tier}</Text>
-                            {item.location?.city && (
-                                <Text style={styles.userLocation}> • {item.location.city}</Text>
+                            <Text style={styles.userTier}>{tier}</Text>
+                            {hasLocation && (
+                                <Text style={styles.userLocation}> • {locationCity}</Text>
                             )}
                         </View>
                     </View>
@@ -362,38 +387,56 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
 
                 <View style={styles.userItemRight}>
                     <Text style={[styles.metricValue, isCurrentUser && styles.currentUserMetric]}>
-                        {getMetricLabel(item)}
+                        {metricText}
                     </Text>
                 </View>
             </TouchableOpacity>
         );
     };
 
-    // Component to show top 3 users in a visually appealing way
+    // Component to show top 3 users in a visually appealing way - ADDITIONAL FIXES HERE
     const renderPodium = (users: CommunityUser[]) => {
-        if (users.length < 3) return null;
+        if (!users || users.length < 3) return null;
 
-        // Get the property name for the selected metric
+        // Validate users exist
+        const user1 = users[0] || {};
+        const user2 = users[1] || {};
+        const user3 = users[2] || {};
+
+        // Pre-compute all the values needed
         const propertyName = metricToProperty[selectedMetric];
+
+        const user1Name = user1.displayName || 'Unknown';
+        const user1Value = ((user1[propertyName] as number) || 0).toLocaleString();
+        const user1Avatar = user1.avatar || null;
+        const user1Letter = user1Name[0]?.toUpperCase() || '?';
+
+        const user2Name = user2.displayName || 'Unknown';
+        const user2Value = ((user2[propertyName] as number) || 0).toLocaleString();
+        const user2Avatar = user2.avatar || null;
+        const user2Letter = user2Name[0]?.toUpperCase() || '?';
+
+        const user3Name = user3.displayName || 'Unknown';
+        const user3Value = ((user3[propertyName] as number) || 0).toLocaleString();
+        const user3Avatar = user3.avatar || null;
+        const user3Letter = user3Name[0]?.toUpperCase() || '?';
 
         return (
             <View style={styles.podiumContainer}>
                 {/* Second Place */}
                 <View style={styles.podiumSecond}>
                     <View style={styles.podiumAvatarContainer}>
-                        {users[1].avatar ? (
-                            <Image source={{ uri: users[1].avatar }} style={styles.podiumAvatar} />
+                        {user2Avatar ? (
+                            <Image source={{ uri: user2Avatar }} style={styles.podiumAvatar} />
                         ) : (
                             <View style={styles.podiumDefaultAvatar}>
-                                <Text style={styles.podiumAvatarText}>{users[1].displayName[0]?.toUpperCase() || '?'}</Text>
+                                <Text style={styles.podiumAvatarText}>{user2Letter}</Text>
                             </View>
                         )}
                     </View>
                     <View style={styles.podiumNameContainer}>
-                        <Text style={styles.podiumName}>{users[1].displayName}</Text>
-                        <Text style={styles.podiumValue}>
-                            {(users[1][propertyName] as number).toLocaleString()}
-                        </Text>
+                        <Text style={styles.podiumName}>{user2Name}</Text>
+                        <Text style={styles.podiumValue}>{user2Value}</Text>
                     </View>
                     <View style={[styles.podiumBase, styles.podiumSecondBase]}>
                         <Text style={styles.podiumRank}>2</Text>
@@ -409,19 +452,17 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
                         <Ionicons name="trophy" size={20} color="#fff" />
                     </LinearGradient>
                     <View style={styles.podiumAvatarContainer}>
-                        {users[0].avatar ? (
-                            <Image source={{ uri: users[0].avatar }} style={styles.podiumAvatar} />
+                        {user1Avatar ? (
+                            <Image source={{ uri: user1Avatar }} style={styles.podiumAvatar} />
                         ) : (
                             <View style={[styles.podiumDefaultAvatar, styles.podiumFirstAvatar]}>
-                                <Text style={styles.podiumAvatarText}>{users[0].displayName[0]?.toUpperCase() || '?'}</Text>
+                                <Text style={styles.podiumAvatarText}>{user1Letter}</Text>
                             </View>
                         )}
                     </View>
                     <View style={styles.podiumNameContainer}>
-                        <Text style={[styles.podiumName, styles.podiumFirstName]}>{users[0].displayName}</Text>
-                        <Text style={[styles.podiumValue, styles.podiumFirstValue]}>
-                            {(users[0][propertyName] as number).toLocaleString()}
-                        </Text>
+                        <Text style={[styles.podiumName, styles.podiumFirstName]}>{user1Name}</Text>
+                        <Text style={[styles.podiumValue, styles.podiumFirstValue]}>{user1Value}</Text>
                     </View>
                     <View style={[styles.podiumBase, styles.podiumFirstBase]}>
                         <Text style={styles.podiumRank}>1</Text>
@@ -431,19 +472,17 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
                 {/* Third Place */}
                 <View style={styles.podiumThird}>
                     <View style={styles.podiumAvatarContainer}>
-                        {users[2].avatar ? (
-                            <Image source={{ uri: users[2].avatar }} style={styles.podiumAvatar} />
+                        {user3Avatar ? (
+                            <Image source={{ uri: user3Avatar }} style={styles.podiumAvatar} />
                         ) : (
                             <View style={styles.podiumDefaultAvatar}>
-                                <Text style={styles.podiumAvatarText}>{users[2].displayName[0]?.toUpperCase() || '?'}</Text>
+                                <Text style={styles.podiumAvatarText}>{user3Letter}</Text>
                             </View>
                         )}
                     </View>
                     <View style={styles.podiumNameContainer}>
-                        <Text style={styles.podiumName}>{users[2].displayName}</Text>
-                        <Text style={styles.podiumValue}>
-                            {(users[2][propertyName] as number).toLocaleString()}
-                        </Text>
+                        <Text style={styles.podiumName}>{user3Name}</Text>
+                        <Text style={styles.podiumValue}>{user3Value}</Text>
                     </View>
                     <View style={[styles.podiumBase, styles.podiumThirdBase]}>
                         <Text style={styles.podiumRank}>3</Text>
@@ -548,9 +587,10 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
         );
     };
 
-    // Render global tab content
+    // Render global tab content - FLATLIST FIXES HERE
     const renderGlobalTab = () => {
-        const displayUsers = globalUsers.slice(0, 50); // Limit to top 50
+        // Add null check and filter out any null items
+        const displayUsers = globalUsers?.filter(item => item != null)?.slice(0, 50) || [];
 
         return (
             <View style={styles.tabContent}>
@@ -558,9 +598,12 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
 
                 <View style={styles.leaderboardContainer}>
                     <FlatList
-                        data={displayUsers.slice(3)} // Skip the top 3 for the regular list
-                        keyExtractor={(item) => item.id}
-                        renderItem={renderUserItem}
+                        data={displayUsers.length >= 3 ? displayUsers.slice(3) : []}
+                        keyExtractor={(item) => item?.id || Math.random().toString()} // Add fallback
+                        renderItem={(props) => {
+                            if (!props.item) return <View><Text>Loading...</Text></View>;
+                            return renderUserItem(props);
+                        }}
                         contentContainerStyle={styles.leaderboardList}
                         ListHeaderComponent={<Text style={styles.leaderboardTitle}>Global Leaderboard</Text>}
                         ListEmptyComponent={
@@ -580,8 +623,11 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
         );
     };
 
-    // Render local tab content
+    // Render local tab content - FLATLIST FIXES HERE
     const renderLocalTab = () => {
+        // Apply filter to remove null values
+        const filteredLocalUsers = localUsers?.filter(item => item != null) || [];
+
         return (
             <View style={styles.tabContent}>
                 <View style={styles.localHeaderContainer}>
@@ -607,14 +653,17 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
                     </View>
                 )}
 
-                {location && localUsers.length >= 3 && renderPodium(localUsers)}
+                {location && filteredLocalUsers.length >= 3 && renderPodium(filteredLocalUsers)}
 
                 {location && (
                     <View style={styles.leaderboardContainer}>
                         <FlatList
-                            data={localUsers.slice(3)} // Skip the top 3 for the regular list
-                            keyExtractor={(item) => item.id}
-                            renderItem={renderUserItem}
+                            data={filteredLocalUsers.length >= 3 ? filteredLocalUsers.slice(3) : []}
+                            keyExtractor={(item) => item?.id || Math.random().toString()}
+                            renderItem={(props) => {
+                                if (!props.item) return <View><Text>Loading...</Text></View>;
+                                return renderUserItem(props);
+                            }}
                             contentContainerStyle={styles.leaderboardList}
                             ListHeaderComponent={<Text style={styles.leaderboardTitle}>Nearby Competitors</Text>}
                             ListEmptyComponent={
@@ -635,16 +684,22 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
         );
     };
 
-    // Render friends tab content
+    // Render friends tab content - FLATLIST FIXES HERE
     const renderFriendsTab = () => {
+        // Apply filter to remove null values
+        const filteredFriends = friends?.filter(item => item != null) || [];
+
         return (
             <View style={styles.tabContent}>
-                {friends.length > 0 ? (
+                {filteredFriends.length > 0 ? (
                     <View style={styles.leaderboardContainer}>
                         <FlatList
-                            data={friends}
-                            keyExtractor={(item) => item.id}
-                            renderItem={renderUserItem}
+                            data={filteredFriends}
+                            keyExtractor={(item) => item?.id || Math.random().toString()}
+                            renderItem={(props) => {
+                                if (!props.item) return <View><Text>Loading...</Text></View>;
+                                return renderUserItem(props);
+                            }}
                             contentContainerStyle={styles.leaderboardList}
                             ListHeaderComponent={<Text style={styles.leaderboardTitle}>Friends Leaderboard</Text>}
                             ListEmptyComponent={
@@ -659,7 +714,7 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
                             )}
                             scrollEventThrottle={16}
                         />
-                        
+
                         <TouchableOpacity
                             style={styles.addFriendsButton}
                             onPress={() => navigation.navigate('friend-search')}
@@ -687,47 +742,62 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
         );
     };
 
-    // Render challenges tab content
+    // Render challenges tab content - FLATLIST FIXES HERE
     const renderChallengesTab = () => {
+        // Filter out null values and only keep active challenges
+        const activeChallenges = challenges?.filter(c => c && c.status === 'active') || [];
+
         return (
             <View style={styles.tabContent}>
-                {challenges.length > 0 ? (
+                {activeChallenges.length > 0 ? (
                     <View style={styles.challengesContainer}>
                         <FlatList
-                            data={challenges.filter(c => c.status === 'active')}
-                            keyExtractor={(item) => item.id}
+                            data={activeChallenges}
+                            keyExtractor={(item) => item?.id || Math.random().toString()}
                             ListHeaderComponent={<Text style={styles.leaderboardTitle}>Your Active Challenges</Text>}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={styles.challengeItem}
-                                    onPress={() => navigation.navigate('challenge-detail', { challengeId: item.id })}
-                                >
-                                    <Text style={styles.challengeTitle}>{item.title}</Text>
-                                    <Text style={styles.challengeDate}>
-                                        {new Date(item.startDate).toLocaleDateString()} - {new Date(item.endDate).toLocaleDateString()}
-                                    </Text>
-                                    <View style={styles.challengeMetrics}>
-                                        <View style={styles.challengeMetric}>
-                                            <Ionicons
-                                                name={
-                                                    item.metric === 'steps' ? 'footsteps-outline' :
-                                                        item.metric === 'calories' ? 'flame-outline' :
-                                                            item.metric === 'distance' ? 'map-outline' : 'time-outline'
-                                                }
-                                                size={16}
-                                                color="#6200ee"
-                                            />
-                                            <Text style={styles.challengeMetricText}>{capitalizeFirstLetter(item.metric)}</Text>
+                            renderItem={({ item }) => {
+                                if (!item) return <View><Text>Loading...</Text></View>;
+
+                                // Pre-compute all values
+                                const title = item.title || '';
+                                const startDate = new Date(item.startDate).toLocaleDateString();
+                                const endDate = new Date(item.endDate).toLocaleDateString();
+                                const metric = item.metric || '';
+                                const metricCapitalized = capitalizeFirstLetter(metric);
+                                const participantsCount = (item.participants?.length || 0);
+                                const iconName =
+                                    metric === 'steps' ? 'footsteps-outline' :
+                                        metric === 'calories' ? 'flame-outline' :
+                                            metric === 'distance' ? 'map-outline' : 'time-outline';
+
+                                return (
+                                    <TouchableOpacity
+                                        style={styles.challengeItem}
+                                        onPress={() => navigation.navigate('challenge-detail', { challengeId: item.id })}
+                                    >
+                                        <Text style={styles.challengeTitle}>{title}</Text>
+                                        <Text style={styles.challengeDate}>
+                                            {startDate} - {endDate}
+                                        </Text>
+                                        <View style={styles.challengeMetrics}>
+                                            <View style={styles.challengeMetric}>
+                                                <Ionicons
+                                                    name={iconName}
+                                                    size={16}
+                                                    color="#6200ee"
+                                                />
+                                                <Text style={styles.challengeMetricText}>{metricCapitalized}</Text>
+                                            </View>
+                                            <View style={styles.challengeMetric}>
+                                                <Ionicons name="people-outline" size={16} color="#6200ee" />
+                                                <Text style={styles.challengeMetricText}>
+                                                    {participantsCount} participants
+                                                </Text>
+                                            </View>
                                         </View>
-                                        <View style={styles.challengeMetric}>
-                                            <Ionicons name="people-outline" size={16} color="#6200ee" />
-                                            <Text style={styles.challengeMetricText}>
-                                                {item.participants.length} participants
-                                            </Text>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            )}
+                                    </TouchableOpacity>
+                                );
+                            }}
                             ListEmptyComponent={
                                 <Text style={styles.emptyText}>No active challenges</Text>
                             }
@@ -767,44 +837,59 @@ export default function CommunityLeaderboards({ navigation }: { navigation: any 
         );
     };
 
-    // Render teams tab content
+    // Render teams tab content - FLATLIST FIXES HERE
     const renderTeamsTab = () => {
+        // Filter out null values
+        const filteredTeams = teams?.filter(item => item != null) || [];
+
         return (
             <View style={styles.tabContent}>
-                {teams.length > 0 ? (
+                {filteredTeams.length > 0 ? (
                     <View style={styles.teamsContainer}>
                         <FlatList
-                            data={teams}
-                            keyExtractor={(item) => item.id}
+                            data={filteredTeams}
+                            keyExtractor={(item) => item?.id || Math.random().toString()}
                             ListHeaderComponent={<Text style={styles.leaderboardTitle}>Your Teams</Text>}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={[styles.teamItem, { borderLeftColor: item.color }]}
-                                    onPress={() => navigation.navigate('team-detail', { teamId: item.id })}
-                                >
-                                    <View style={styles.teamHeader}>
-                                        <View style={[styles.teamIcon, { backgroundColor: item.color + '20' }]}>
-                                            <Text style={[styles.teamIconText, { color: item.color }]}>
-                                                {item.name.substring(0, 2).toUpperCase()}
-                                            </Text>
+                            renderItem={({ item }) => {
+                                if (!item) return <View><Text>Loading...</Text></View>;
+
+                                // Pre-compute all values
+                                const teamName = item.name || '';
+                                const teamInitials = teamName.substring(0, 2).toUpperCase();
+                                const teamColor = item.color || '#cccccc';
+                                const memberCount = (item.members?.length || 0);
+                                const totalSteps = (item.totalSteps || 0).toLocaleString();
+                                const totalCalories = (item.totalCalories || 0).toLocaleString();
+
+                                return (
+                                    <TouchableOpacity
+                                        style={[styles.teamItem, { borderLeftColor: teamColor }]}
+                                        onPress={() => navigation.navigate('team-detail', { teamId: item.id })}
+                                    >
+                                        <View style={styles.teamHeader}>
+                                            <View style={[styles.teamIcon, { backgroundColor: teamColor + '20' }]}>
+                                                <Text style={[styles.teamIconText, { color: teamColor }]}>
+                                                    {teamInitials}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.teamInfo}>
+                                                <Text style={styles.teamName}>{teamName}</Text>
+                                                <Text style={styles.teamMembers}>{memberCount} members</Text>
+                                            </View>
                                         </View>
-                                        <View style={styles.teamInfo}>
-                                            <Text style={styles.teamName}>{item.name}</Text>
-                                            <Text style={styles.teamMembers}>{item.members.length} members</Text>
+                                        <View style={styles.teamStats}>
+                                            <View style={styles.teamStat}>
+                                                <Ionicons name="footsteps-outline" size={16} color="#666" />
+                                                <Text style={styles.teamStatValue}>{totalSteps}</Text>
+                                            </View>
+                                            <View style={styles.teamStat}>
+                                                <Ionicons name="flame-outline" size={16} color="#666" />
+                                                <Text style={styles.teamStatValue}>{totalCalories}</Text>
+                                            </View>
                                         </View>
-                                    </View>
-                                    <View style={styles.teamStats}>
-                                        <View style={styles.teamStat}>
-                                            <Ionicons name="footsteps-outline" size={16} color="#666" />
-                                            <Text style={styles.teamStatValue}>{item.totalSteps.toLocaleString()}</Text>
-                                        </View>
-                                        <View style={styles.teamStat}>
-                                            <Ionicons name="flame-outline" size={16} color="#666" />
-                                            <Text style={styles.teamStatValue}>{item.totalCalories.toLocaleString()}</Text>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            )}
+                                    </TouchableOpacity>
+                                );
+                            }}
                             ListEmptyComponent={
                                 <Text style={styles.emptyText}>No teams found</Text>
                             }
